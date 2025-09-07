@@ -1,0 +1,20 @@
+{
+  "Standard (OK/NOT OK)": {
+    "OK": "OK\r\n",
+    "NOT OK": "NOT OK\r\n",
+    "SKIPPED": "SKIPPED\r\n",
+    "OK (JUMPED)": "OK\r\n"
+  },
+  "Numeric (1/0)": {
+    "OK": "1\r\n",
+    "NOT OK": "0\r\n",
+    "SKIPPED": "2\r\n",
+    "OK (JUMPED)": "1\r\n"
+  },
+  "PLC Signals": {
+    "OK": "SIG_A_HIGH\r\n",
+    "NOT OK": "SIG_B_HIGH\r\n",
+    "SKIPPED": "SIG_C_HIGH\r\n",
+    "OK (JUMPED)": "SIG_A_HIGH\r\n"
+  }
+}

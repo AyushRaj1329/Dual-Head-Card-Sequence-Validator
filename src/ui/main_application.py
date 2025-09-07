@@ -1,0 +1,386 @@
+# src/ui/main_application.py
+import sys
+import os
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QGraphicsOpacityEffect
+from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QRect, QParallelAnimationGroup, QTimer
+from PyQt6.QtGui import QPixmap, QScreen
+
+from ..app_state import AppState
+from .com_port_setup import ComPortSetupWindow
+from .file_management import FileManagementWindow
+from .scanner_logging import ScannerLoggingWindow
+from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
+from .widgets import ClockWidget
+import constants
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+class HomePage(QMainWindow):
+    def __init__(self, app_state):
+        super().__init__()
+        self.app_state = app_state
+        self.setWindowTitle("Card Sequence Validator")
+
+        
+
+        self.com_port_window = None
+        self.file_management_window = None
+        self.scanner_logging_window = None
+        self.initializing_label = None
+        self.animation_played = False
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        self.main_layout = QVBoxLayout(central_widget)
+        self.main_layout.setContentsMargins(40, 30, 40, 30)
+        self.main_layout.setSpacing(30)
+
+        # Create the logo for animation
+        self.logo_label = QLabel(self)
+        self.aspect_ratio = 16/9
+        logo_path = resource_path(constants.LOGO_PATH)
+        if os.path.exists(logo_path):
+            pixmap = QPixmap(logo_path)
+            self.aspect_ratio = pixmap.width() / pixmap.height()
+            self.logo_label.setPixmap(pixmap)
+            self.logo_label.setScaledContents(True)
+
+        # Create all widgets but keep them hidden initially
+        self.header_container = QWidget()
+        self.welcome_section = QWidget()
+        self.feature_cards_container = QWidget()
+        self.system_status_container = QWidget()
+
+        self.create_header(self.header_container)
+        self.create_welcome_section(self.welcome_section)
+        self.create_feature_cards(self.feature_cards_container)
+        self.create_system_status(self.system_status_container)
+
+        self.main_layout.addWidget(self.header_container)
+        self.main_layout.addWidget(self.welcome_section)
+        self.main_layout.addWidget(self.feature_cards_container)
+        self.main_layout.addWidget(self.system_status_container)
+        self.main_layout.addStretch()
+
+        self.widgets_to_fade_in = [self.header_container, self.welcome_section, self.feature_cards_container, self.system_status_container]
+        for widget in self.widgets_to_fade_in:
+            opacity_effect = QGraphicsOpacityEffect(opacity=0.0)
+            widget.setGraphicsEffect(opacity_effect)
+            widget.setAutoFillBackground(True)
+
+        self.app_state.state_changed.connect(self.update_status_indicators)
+        self.update_status_indicators()
+
+        # Apply initial theme after app_state is ready (and cache is loaded)
+        self.apply_theme(self.app_state.current_theme)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+
+        if not self.animation_played:
+            # Initial state of the logo for the delay period
+            start_height = 300
+            start_width = int(start_height * self.aspect_ratio)
+
+            # Get screen geometry to center the logo
+            screen = QApplication.primaryScreen()
+            screen_geometry = screen.availableGeometry()
+
+            # Calculate center position based on screen geometry
+            x = (screen_geometry.width() - start_width) // 2
+            y = (screen_geometry.height() - start_height) // 2
+
+            self.logo_label.setGeometry(x, y, start_width, start_height)
+            self.logo_label.raise_()
+
+            # Create and position the initializing label
+            self.initializing_label = QLabel("Initializing...", self)
+            self.initializing_label.setObjectName("subtitle")
+            self.initializing_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.initializing_label.adjustSize()
+            label_x = x + (start_width - self.initializing_label.width()) // 2
+            label_y = y + start_height + 10
+            self.initializing_label.setGeometry(label_x, label_y, self.initializing_label.width(), self.initializing_label.height())
+            self.initializing_label.raise_()
+
+            # Delay the start of the animation to keep the logo on screen for some time
+            QTimer.singleShot(1500, self.start_animation)
+            self.animation_played = True
+
+    def start_animation(self):
+        start_rect = self.logo_label.geometry()
+
+        # Final state of the logo
+        end_rect = self.header_logo_placeholder.geometry()
+        end_rect.moveTo(self.header_container.mapTo(self, self.header_logo_placeholder.pos()))
+
+        # Animation for the logo
+        self.logo_animation = QPropertyAnimation(self.logo_label, b"geometry")
+        self.logo_animation.setDuration(2500)
+        self.logo_animation.setStartValue(start_rect)
+        self.logo_animation.setEndValue(end_rect)
+        self.logo_animation.setEasingCurve(QEasingCurve.Type.OutQuint)
+
+        # Animations for fading in the other widgets
+        self.fade_in_animations = QParallelAnimationGroup()
+        for widget in self.widgets_to_fade_in:
+            animation = QPropertyAnimation(widget.graphicsEffect(), b"opacity")
+            animation.setDuration(2000)
+            animation.setStartValue(0.0)
+            animation.setEndValue(1.0)
+            self.fade_in_animations.addAnimation(animation)
+
+        # Start animations
+        self.logo_animation.start()
+        self.fade_in_animations.start()
+
+    def fade_out_initializing_label(self):
+        if self.initializing_label:
+            # Fade out the initializing label
+            fade_out_animation = QPropertyAnimation(self.initializing_label, b"windowOpacity")
+            fade_out_animation.setDuration(500) # Faster fade out
+            fade_out_animation.setStartValue(1.0)
+            fade_out_animation.setEndValue(0.0)
+            fade_out_animation.start()
+
+    def create_header(self, container):
+        header_layout = QHBoxLayout(container)
+        header_layout.setContentsMargins(0, 0, 0, 10)
+        header_layout.setSpacing(15)
+
+        # Placeholder for the logo in the header
+        self.header_logo_placeholder = QLabel()
+        placeholder_height = 120
+        placeholder_width = int(placeholder_height * self.aspect_ratio)
+        self.header_logo_placeholder.setFixedSize(placeholder_width, placeholder_height)
+
+        title_layout = QVBoxLayout()
+        title_layout.setSpacing(0)
+        title = QLabel("Card Sequence Validator")
+        title.setObjectName("mainTitle")
+        subtitle = QLabel("Quality Control System")
+        subtitle.setObjectName("mainSubtitle")
+        title_layout.addWidget(title)
+        title_layout.addWidget(subtitle)
+
+        clock = ClockWidget()
+
+        # Theme Toggle Button
+        self.theme_button = QPushButton() # Initialize without text
+        self.theme_button.clicked.connect(self.toggle_theme)
+
+        # Set initial text and objectName based on current_theme
+        # This will be updated by update_theme_button_text after initial theme is applied
+        self.update_theme_button_text(self.app_state.current_theme)
+
+
+        header_layout.addWidget(self.header_logo_placeholder)
+        header_layout.addLayout(title_layout)
+        header_layout.addStretch()
+        header_layout.addWidget(clock)
+        header_layout.addWidget(self.theme_button)
+
+    def update_theme_button_text(self, theme_name):
+        if theme_name == "dark":
+            self.theme_button.setText("Switch to Light Mode")
+            self.theme_button.setObjectName("light_theme_toggle") # New objectName for light theme button style
+        else:
+            self.theme_button.setText("Switch to Dark Mode")
+            self.theme_button.setObjectName("dark_theme_toggle") # New objectName for dark theme button style
+        self.theme_button.style().unpolish(self.theme_button)
+        self.theme_button.style().polish(self.theme_button)
+
+
+    def create_welcome_section(self, container):
+        layout = QVBoxLayout(container)
+        welcome_frame = QFrame()
+        welcome_frame.setObjectName("accentPanel")
+        welcome_layout = QVBoxLayout(welcome_frame)
+        welcome_layout.setSpacing(10)
+        welcome_layout.setContentsMargins(30, 30, 30, 30)
+
+        welcome_title = QLabel("Welcome to the Validator Control Panel")
+        welcome_title.setObjectName("h2")
+        welcome_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        welcome_desc = QLabel("Manage scanner connections, load sequence files, and monitor validation in real-time.")
+        welcome_desc.setObjectName("subtitle")
+        welcome_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        welcome_layout.addWidget(welcome_title)
+        welcome_layout.addWidget(welcome_desc)
+        layout.addWidget(welcome_frame)
+
+    def create_feature_cards(self, container):
+        layout = QHBoxLayout(container)
+        layout.setSpacing(30)
+        cards_data = [
+            ("Scanner & Logging", "Live scanner input and validation logging", "Open Scanner", "📱", self.open_scanner),
+            ("COM Port Setup", "Configure input and output serial ports", "Configure Ports", "🔧", self.open_com_port_setup),
+            ("File Management", "Manage card sequence files and logs", "Manage Files", "📁", self.open_file_management)
+        ]
+        for title, desc, btn_text, icon, callback in cards_data:
+            layout.addWidget(self.create_feature_card(title, desc, btn_text, icon, callback), 1)
+
+    def create_feature_card(self, title, description, button_text, icon, callback):
+        card = QFrame()
+        card.setObjectName("panel")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(25, 25, 25, 25)
+        layout.setSpacing(15)
+
+        icon_label = QLabel(icon)
+        icon_label.setStyleSheet("font-size: 36px;")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("h2")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        desc_label = QLabel(description)
+        desc_label.setObjectName("subtitle")
+        desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc_label.setWordWrap(True)
+
+        button = QPushButton(button_text)
+        button.setObjectName("primary")
+        button.clicked.connect(callback)
+
+        layout.addWidget(icon_label)
+        layout.addWidget(title_label)
+        layout.addWidget(desc_label)
+        layout.addStretch()
+        layout.addWidget(button)
+        return card
+
+    def create_system_status(self, container):
+        layout = QVBoxLayout(container)
+        status_frame = QFrame()
+        status_frame.setObjectName("panel")
+        status_layout = QVBoxLayout(status_frame)
+        status_layout.setContentsMargins(25, 20, 25, 20)
+        status_title = QLabel("System Status")
+        status_title.setObjectName("h2")
+
+        indicators_layout = QHBoxLayout()
+        indicators_layout.setSpacing(30)
+
+        self.scanner_status_label = QLabel()
+        self.file_status_label = QLabel()
+        self.com_status_label = QLabel()
+        self.output_com_status_label = QLabel()
+
+        indicators_layout.addWidget(self.create_status_indicator("Scanner:", self.scanner_status_label), 1)
+        indicators_layout.addWidget(self.create_status_indicator("Input Port:", self.com_status_label), 1)
+        indicators_layout.addWidget(self.create_status_indicator("Output Port:", self.output_com_status_label), 1)
+        indicators_layout.addWidget(self.create_status_indicator("File Loaded:", self.file_status_label), 1)
+
+        status_layout.addWidget(status_title)
+        status_layout.addLayout(indicators_layout)
+        layout.addWidget(status_frame)
+
+    def create_status_indicator(self, label_text, status_widget):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0,0,0,0)
+        label = QLabel(label_text)
+        label.setObjectName("h2")
+        layout.addWidget(label)
+        layout.addWidget(status_widget)
+        return container
+
+    def update_status_indicators(self):
+        if self.app_state.is_scanning:
+            self.scanner_status_label.setText("Scanning")
+            self.scanner_status_label.setObjectName("statusOK")
+        else:
+            self.scanner_status_label.setText("Idle")
+            self.scanner_status_label.setObjectName("statusIdle")
+
+        if self.app_state.selected_file_path:
+            file_name = os.path.basename(self.app_state.selected_file_path)
+            self.file_status_label.setText(f"{file_name} ({len(self.app_state.expected_cards)} cards)")
+            self.file_status_label.setObjectName("statusOK")
+        else:
+            self.file_status_label.setText("No File")
+            self.file_status_label.setObjectName("statusWarning")
+
+        if self.app_state.selected_com_port:
+            self.com_status_label.setText(self.app_state.selected_com_port)
+            self.com_status_label.setObjectName("statusOK")
+        else:
+            self.com_status_label.setText("Not Set")
+            self.com_status_label.setObjectName("statusWarning")
+
+        if self.app_state.selected_output_port:
+            self.output_com_status_label.setText(self.app_state.selected_output_port)
+            self.output_com_status_label.setObjectName("statusOK")
+        else:
+            self.output_com_status_label.setText("Not Set")
+            self.output_com_status_label.setObjectName("statusWarning")
+
+        self.scanner_status_label.style().unpolish(self.scanner_status_label)
+        self.scanner_status_label.style().polish(self.scanner_status_label)
+        self.file_status_label.style().unpolish(self.file_status_label)
+        self.file_status_label.style().polish(self.file_status_label)
+        self.com_status_label.style().unpolish(self.com_status_label)
+        self.com_status_label.style().polish(self.com_status_label)
+        self.output_com_status_label.style().unpolish(self.output_com_status_label)
+        self.output_com_status_label.style().polish(self.output_com_status_label)
+
+    def open_scanner(self):
+        if self.scanner_logging_window is None:
+            self.scanner_logging_window = ScannerLoggingWindow(self.app_state)
+        self.scanner_logging_window.show()
+        self.scanner_logging_window.activateWindow()
+        self.scanner_logging_window.raise_()
+
+    def open_com_port_setup(self):
+        if self.com_port_window is None:
+            self.com_port_window = ComPortSetupWindow(self.app_state)
+        self.com_port_window.show()
+        self.com_port_window.activateWindow()
+        self.com_port_window.raise_()
+
+    def open_file_management(self):
+        if self.file_management_window is None:
+            self.file_management_window = FileManagementWindow(self.app_state)
+        self.file_management_window.show()
+        self.file_management_window.activateWindow()
+        self.file_management_window.raise_()
+
+    def closeEvent(self, event):
+        self.app_state.save_cache()
+        QApplication.quit()
+
+    def toggle_theme(self):
+        if self.current_theme == "dark":
+            self.current_theme = "light"
+            self.theme_button.setText("Switch to Dark Mode")
+            self.theme_button.setObjectName("dark_theme_toggle") # Apply dark theme button style
+        else:
+            self.current_theme = "dark"
+            self.theme_button.setText("Switch to Light Mode")
+            self.theme_button.setObjectName("light_theme_toggle") # Apply light theme button style
+
+        self.apply_theme(self.current_theme)
+        self.app_state.set_theme(self.current_theme) # Save theme to app_state
+
+    def apply_theme(self, theme_name):
+        if theme_name == "dark":
+            self.setStyleSheet(DARK_THEME_STYLESHEET)
+        else:
+            self.setStyleSheet(LIGHT_THEME_STYLESHEET)
+        self.current_theme = theme_name
+        # Re-polish all widgets to apply new stylesheet
+        for widget in QApplication.allWidgets():
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
