@@ -1,0 +1,15 @@
+# PyInstaller build directories
+build/
+dist/
+
+# PyInstaller spec file
+*.spec
+
+# Virtual environment
+.venv/
+__pycache__/
+
+# Other common ignores
+*.pyc
+*.log
+*.tmp
