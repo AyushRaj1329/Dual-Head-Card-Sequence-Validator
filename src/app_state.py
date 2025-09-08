@@ -375,6 +375,7 @@ class AppState(QObject):
                 "expected_code": self.expected_cards[future_index][1], "status": status
             }
             log_entries_to_add.append(log_entry)
+            self.send_output_signal(status)
             self.current_card_index = future_index + 1
         else: # This block now only runs if the user clicks "No" on the jump approval dialog
             status = "NOT OK"
