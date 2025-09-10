@@ -6,4 +6,4 @@ pyserial>=3.5       # Serial communication for COM port handling
 # - numpy, pandas: Not imported anywhere in the codebase
 # - pillow: Only used for logo loading, but PyQt6 handles image loading internally
 # - python-dateutil, pytz, six, tzdata: datetime operations use built-in modules
-# - PyQt5: Conflicted with PyQt6, removed to avoid version conflicts
+# - PyQt5: Conflicted with PyQt6, removed to avoid version conflicts11

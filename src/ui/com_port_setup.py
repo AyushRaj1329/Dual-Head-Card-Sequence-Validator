@@ -36,7 +36,6 @@ class ComPortSetupWindow(QMainWindow):
         self.create_settings_section(main_layout)
         self.create_action_buttons(main_layout)
         self.create_status_log(main_layout)
-        self.start_card_input_port_combo = QComboBox()
         
         self.app_state.state_changed.connect(self.update_ui_from_state)
         self.app_state.com_status_changed.connect(self.add_log_entry)
