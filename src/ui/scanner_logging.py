@@ -185,14 +185,15 @@ class ScannerLoggingWindow(QMainWindow):
         header_layout.addStretch()
 
         self.log_table = QTableWidget()
-        self.log_table.setColumnCount(5)
-        self.log_table.setHorizontalHeaderLabels(["Index", "Timestamp", "Scanned Code", "Expected Code", "Status"])
+        self.log_table.setColumnCount(6)
+        self.log_table.setHorizontalHeaderLabels(["Index", "Timestamp", "Scanned Code", "Expected Code", "Status", "Scanned Side"])
         header = self.log_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.log_table.setAlternatingRowColors(True)
         self.log_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
@@ -243,16 +244,43 @@ class ScannerLoggingWindow(QMainWindow):
             expected_code = log_entry["expected_code"]
             display_numcard = "---"
 
-            if expected_code in self.app_state.iccid_to_numcard:
-                display_numcard = str(self.app_state.iccid_to_numcard[expected_code])
-            elif expected_code == "N/A":
-                display_numcard = "N/A"
-            elif expected_code == "End of Sequence":
-                display_numcard = "End"
-            elif log_entry["status"] == "SKIPPED":
-                display_numcard = str(self.app_state.iccid_to_numcard.get(expected_code, "---"))
-            elif log_entry["status"] == "NOT OK":
-                display_numcard = str(self.app_state.iccid_to_numcard.get(expected_code, "---"))
+            # Find the numcard by searching both left and right QR codes
+            found_num = False
+            for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
+                if expected_code == left_qr or expected_code == right_qr:
+                    display_numcard = str(numcard)
+                    found_num = True
+                    break
+            
+            if not found_num:
+                if expected_code == "N/A":
+                    display_numcard = "N/A"
+                elif expected_code == "End of Sequence":
+                    display_numcard = "End"
+                elif log_entry["status"] == "SKIPPED":
+                    # In case of skipped, the expected_code might not be in the main lookup, so we find it here
+                    for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
+                        if expected_code == left_qr or expected_code == right_qr:
+                            display_numcard = str(numcard)
+                            break
+                elif log_entry["status"] == "NOT OK":
+                    # Same for NOT OK
+                    for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
+                        if expected_code == left_qr or expected_qr == right_qr:
+                            display_numcard = str(numcard)
+                            break
+                elif log_entry["status"] == "SKIPPED":
+                    # In case of skipped, the expected_code might not be in the main lookup, so we find it here
+                    for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
+                        if expected_code == left_qr or expected_code == right_qr:
+                            display_numcard = str(numcard)
+                            break
+                elif log_entry["status"] == "NOT OK":
+                    # Same for NOT OK
+                    for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
+                        if expected_code == left_qr or expected_code == right_qr:
+                            display_numcard = str(numcard)
+                            break
 
             self.log_table.setItem(row_position, 0, QTableWidgetItem(display_numcard))
             self.log_table.setItem(row_position, 1, QTableWidgetItem(log_entry["timestamp"]))
@@ -269,6 +297,7 @@ class ScannerLoggingWindow(QMainWindow):
                 status_item.setForeground(QColor("#2ecc71"))
 
             self.log_table.setItem(row_position, 4, status_item)
+            self.log_table.setItem(row_position, 5, QTableWidgetItem(log_entry.get("scanned_side", "N/A")))
 
         total_items = len(self.filtered_log_entries)
         total_pages = (total_items + self.items_per_page - 1) // self.items_per_page
@@ -324,25 +353,28 @@ class ScannerLoggingWindow(QMainWindow):
         has_port = bool(self.app_state.selected_com_port)
         has_file = bool(self.app_state.expected_cards)
 
-        self.start_btn.setEnabled(not is_scanning and has_port and has_file)
+        self.start_btn.setEnabled(not is_scanning and has_port and has_file and self.app_state.start_card_has_been_scanned)
         self.stop_btn.setEnabled(is_scanning)
 
         idx = self.app_state.current_card_index
         cards = self.app_state.expected_cards
+        scan_side_index = 1 if self.app_state.scan_side == 'left' else 2
 
         if cards and idx > 0 and idx <= len(cards):
-            self.current_card_label.setText(cards[idx - 1][1])
+            self.current_card_label.setText(cards[idx - 1][scan_side_index])
         elif has_file and idx == 0:
             self.current_card_label.setText("N/A")
         else:
             self.current_card_label.setText("No file loaded")
 
-        if cards and idx < len(cards):
-            self.next_card_label.setText(cards[idx][1])
-        elif has_file:
+        if cards and idx < len(cards) and self.app_state.start_card_has_been_scanned:
+            self.next_card_label.setText(cards[idx][scan_side_index])
+        elif has_file and self.app_state.start_card_has_been_scanned:
             self.next_card_label.setText("End of Sequence")
+        elif has_file:
+            self.next_card_label.setText("Scan Start Card")
         else:
-            self.next_card_label.setText("N/A")
+            self.next_card_label.setText("No file loaded")
 
         if self.app_state.log_data:
             last_log = self.app_state.log_data[-1]

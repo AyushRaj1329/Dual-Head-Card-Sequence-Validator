@@ -103,11 +103,14 @@ class AppState(QObject):
         self.selected_output_port = None
         self.output_formats = {}
         self.selected_output_format = ""
+        self.scan_side = "left"  # Default to left side
         self.selected_file_path = ""
         self.expected_cards = []
-        self.iccid_to_numcard = {}
-        self.iccid_to_index = {}
+        self.left_qr_to_index = {}
+        self.right_qr_to_index = {}
+        self.numcard_to_qrs = {}
         self.current_card_index = 0
+        self.start_card_has_been_scanned = False
         self.first_scan_received = True
         self.log_data = []
         self.baud_rate, self.data_bits, self.parity, self.stop_bits, self.timeout = 115200, 8, 'N', 1, 1
@@ -154,6 +157,7 @@ class AppState(QObject):
                 self.stop_bits = cache_data.get('stop_bits', 1)
                 self.timeout = cache_data.get('timeout', 1)
                 self.selected_output_format = cache_data.get('selected_output_format', "")
+                
                 self.current_theme = cache_data.get('current_theme', "dark")
                 selected_file_path = cache_data.get('selected_file_path', "")
                 if selected_file_path:
@@ -177,6 +181,7 @@ class AppState(QObject):
             'stop_bits': self.stop_bits,
             'timeout': self.timeout,
             'selected_output_format': self.selected_output_format,
+            
             'selected_file_path': self.selected_file_path,
             'log_data': self.log_data,
             'current_theme': self.current_theme
@@ -215,30 +220,39 @@ class AppState(QObject):
 
     def handle_com_data(self, scanned_code):
         log_entry = None
+        scanned_side = self.scan_side.capitalize()
+
         if not self.expected_cards:
-            log_entry = self.add_log_entry(scanned_code, "N/A", "NO FILE")
+            log_entry = self.add_log_entry(scanned_code, "N/A", "NO FILE", scanned_side)
         elif self.current_card_index >= len(self.expected_cards):
-            log_entry = self.add_log_entry(scanned_code, "End of Sequence", "EXTRA SCAN")
+            log_entry = self.add_log_entry(scanned_code, "End of Sequence", "EXTRA SCAN", scanned_side)
         else:
-            expected_iccid = self.expected_cards[self.current_card_index][1]
-            if scanned_code == expected_iccid:
+            # Determine which QR code to expect based on scan_side
+            expected_qr = self.expected_cards[self.current_card_index][1 if self.scan_side == 'left' else 2]
+
+            if scanned_code == expected_qr:
                 status = "OK"
-                log_entry = self.add_log_entry(scanned_code, expected_iccid, status)
+                log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
                 self.send_output_signal(status)
                 self.current_card_index += 1
             else:
-                if scanned_code in self.iccid_to_index:
-                    future_match_index = self.iccid_to_index[scanned_code]
+                # Determine which lookup to use
+                lookup_dict = self.left_qr_to_index if self.scan_side == 'left' else self.right_qr_to_index
+                if scanned_code in lookup_dict:
+                    future_match_index = lookup_dict[scanned_code]
                     if future_match_index > self.current_card_index:
                         num_skipped = future_match_index - self.current_card_index
+                        # The approval dialog will handle logging, so we don't log here
                         self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_match_index)
                     else:
+                        # Scanned a card that was already scanned/skipped
                         status = "NOT OK"
-                        log_entry = self.add_log_entry(scanned_code, expected_iccid, status)
+                        log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
                         self.send_output_signal(status)
                 else:
+                    # Scanned card doesn't exist in the current scan side's list
                     status = "NOT OK"
-                    log_entry = self.add_log_entry(scanned_code, expected_iccid, status)
+                    log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
                     self.send_output_signal(status)
         
         if log_entry:
@@ -285,11 +299,12 @@ class AppState(QObject):
     def get_timestamp(self):
         return datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
-    def add_log_entry(self, scanned_code, expected_code, status):
+    def add_log_entry(self, scanned_code, expected_code, status, scanned_side="N/A"):
         timestamp = self.get_timestamp()
         log_entry = {
             "timestamp": timestamp, "scanned_code": scanned_code,
-            "expected_code": expected_code, "status": status
+            "expected_code": expected_code, "status": status,
+            "scanned_side": scanned_side
         }
         self.log_data.append(log_entry)
         return log_entry
@@ -303,29 +318,33 @@ class AppState(QObject):
 
     def load_file(self, file_path):
         try:
-            parsed_data = parse_file(file_path)
-            self.expected_cards = [card_tuple for card_tuple, _ in parsed_data]
-            self.iccid_to_numcard = {iccid: numcard for numcard, iccid in self.expected_cards}
-            self.iccid_to_index = {iccid: i for i, (_, iccid) in enumerate(self.expected_cards)}
+            self.expected_cards = parse_file(file_path)
+            self.left_qr_to_index = {left_qr: i for i, (_, left_qr, _) in enumerate(self.expected_cards)}
+            self.right_qr_to_index = {right_qr: i for i, (_, _, right_qr) in enumerate(self.expected_cards)}
+            self.numcard_to_qrs = {numcard: (left_qr, right_qr) for numcard, left_qr, right_qr in self.expected_cards}
             self.selected_file_path = file_path
             self.current_card_index = 0
+            self.start_card_has_been_scanned = False # Reset flag
             self.first_scan_received = True
             self.state_changed.emit()
             return True, f"Loaded {len(self.expected_cards)} cards."
         except Exception as e:
             self.selected_file_path = ""
             self.expected_cards = []
-            self.iccid_to_numcard = {}
-            self.iccid_to_index = {}
+            self.left_qr_to_index = {}
+            self.right_qr_to_index = {}
+            self.numcard_to_qrs = {}
             self.state_changed.emit()
             return False, f"Error loading file: {e}"
 
     def clear_file(self):
         self.selected_file_path = ""
         self.expected_cards = []
-        self.iccid_to_numcard = {}
-        self.iccid_to_index = {}
+        self.left_qr_to_index = {}
+        self.right_qr_to_index = {}
+        self.numcard_to_qrs = {}
         self.current_card_index = 0
+        self.start_card_has_been_scanned = False # Reset flag
         self.first_scan_received = True
         self.state_changed.emit()
         self.save_cache()
@@ -386,11 +405,21 @@ class AppState(QObject):
                 self.start_card_scan_complete.emit("No data received from scan.", False)
                 return
 
-            if scanned_code in self.iccid_to_index:
-                found_index = self.iccid_to_index[scanned_code]
+            # Automatically determine the scan side
+            if scanned_code in self.left_qr_to_index:
+                self.scan_side = "left"
+                found_index = self.left_qr_to_index[scanned_code]
                 self.set_start_index(found_index)
+                self.start_card_has_been_scanned = True
                 card_num = self.expected_cards[found_index][0]
-                self.start_card_scan_complete.emit(f"Start card set to {card_num} ({scanned_code})", True)
+                self.start_card_scan_complete.emit(f"Start card set to {card_num} ({scanned_code}). Scan side set to Left.", True)
+            elif scanned_code in self.right_qr_to_index:
+                self.scan_side = "right"
+                found_index = self.right_qr_to_index[scanned_code]
+                self.set_start_index(found_index)
+                self.start_card_has_been_scanned = True
+                card_num = self.expected_cards[found_index][0]
+                self.start_card_scan_complete.emit(f"Start card set to {card_num} ({scanned_code}). Scan side set to Right.", True)
             else:
                 self.start_card_scan_complete.emit(f"Scanned card {scanned_code} not found in the loaded file.", False)
 
@@ -419,37 +448,28 @@ class AppState(QObject):
         thread.start()
 
     def _perform_mismatch_resolution(self, scanned_code, approved, future_index):
-        expected_iccid = self.expected_cards[self.current_card_index][1]
+        # Determine the expected QR based on the current scan side
+        expected_qr = self.expected_cards[self.current_card_index][1 if self.scan_side == 'left' else 2]
+        scanned_side = self.scan_side.capitalize()
         log_entries_to_add = []
 
         if approved and future_index != -1:
+            # Log all the cards that were skipped
             for i in range(self.current_card_index, future_index):
-                skipped_iccid = self.expected_cards[i][1]
-                timestamp = self.get_timestamp()
-                log_entry = {
-                    "timestamp": timestamp, "scanned_code": "MISSING",
-                    "expected_code": skipped_iccid, "status": "SKIPPED"
-                }
-                log_entries_to_add.append(log_entry)
+                skipped_num, skipped_left, skipped_right = self.expected_cards[i]
+                skipped_qr = skipped_left if self.scan_side == 'left' else skipped_right
+                log_entries_to_add.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", "N/A"))
 
+            # Log the card that was actually scanned
             status = "OK (JUMPED)"
-            timestamp = self.get_timestamp()
-            log_entry = {
-                "timestamp": timestamp, "scanned_code": scanned_code,
-                "expected_code": self.expected_cards[future_index][1], "status": status
-            }
-            log_entries_to_add.append(log_entry)
+            expected_jumped_qr = self.expected_cards[future_index][1 if self.scan_side == 'left' else 2]
+            log_entries_to_add.append(self.add_log_entry(scanned_code, expected_jumped_qr, status, scanned_side))
+            
             self.send_output_signal(status)
             self.current_card_index = future_index + 1
         else: # This block now only runs if the user clicks "No" on the jump approval dialog
             status = "NOT OK"
-            timestamp = self.get_timestamp()
-            log_entry = {
-                "timestamp": timestamp, "scanned_code": scanned_code,
-                "expected_code": expected_iccid, "status": status
-            }
-            log_entries_to_add.append(log_entry)
-            self.send_output_signal(status)
+            log_entries_to_add.append(self.add_log_entry(scanned_code, expected_qr, status, scanned_side))
             self.send_output_signal(status)
 
         self.log_data.extend(log_entries_to_add)

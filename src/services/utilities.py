@@ -12,18 +12,15 @@ def parse_cpd_cards(file_path):
                 header = line.split(";")
                 numcard_idx = header.index("NUMCARD")
                 iccid_idx = header.index("ICCID")
+                imsi_idx = header.index("IMSI") # Get index for IMSI (right QR)
                 continue
             if start_reading and line:
                 parts = line.split(";")
                 numcard = parts[numcard_idx]
                 iccid = parts[iccid_idx]
-                card_data.append((numcard, iccid))
-    paired_cards = []
-    for i in range(len(card_data)):
-        current = card_data[i]
-        next_card = card_data[i + 1] if i + 1 < len(card_data) else None
-        paired_cards.append((current, next_card))
-    return paired_cards
+                imsi = parts[imsi_idx]
+                card_data.append((numcard, iccid, imsi))
+    return card_data
 
 def parse_txt_file(file_path):
     iccid_data = []
@@ -31,13 +28,9 @@ def parse_txt_file(file_path):
         for i, line in enumerate(f):
             iccid = line.strip()
             if iccid:
-                iccid_data.append((f"Card_{i+1}", iccid)) # Assign a generic NUMCARD
-    paired_cards = []
-    for i in range(len(iccid_data)):
-        current = iccid_data[i]
-        next_card = iccid_data[i + 1] if i + 1 < len(iccid_data) else None
-        paired_cards.append((current, next_card))
-    return paired_cards
+                # For TXT files, we assume left and right QR are the same
+                iccid_data.append((f"Card_{i+1}", iccid, iccid))
+    return iccid_data
 
 def parse_csv_file(file_path):
     card_data = []
@@ -47,15 +40,14 @@ def parse_csv_file(file_path):
         try:
             numcard_idx = header.index("NUMCARD")
             iccid_idx = header.index("ICCID")
+            # Try to find an IMSI column, but don't require it
+            imsi_idx = header.index("IMSI") if "IMSI" in header else None
         except ValueError:
-            raise ValueError("CSV file must contain 'NUMCARD' and 'ICCID' columns.")
+            raise ValueError("CSV file must contain at least 'NUMCARD' and 'ICCID' columns.")
         for row in reader:
             numcard = row[numcard_idx]
             iccid = row[iccid_idx]
-            card_data.append((numcard, iccid))
-    paired_cards = []
-    for i in range(len(card_data)):
-        current = card_data[i]
-        next_card = card_data[i + 1] if i + 1 < len(card_data) else None
-        paired_cards.append((current, next_card))
-    return paired_cards
+            # Use IMSI if available, otherwise duplicate ICCID
+            imsi = row[imsi_idx] if imsi_idx is not None else iccid
+            card_data.append((numcard, iccid, imsi))
+    return card_data

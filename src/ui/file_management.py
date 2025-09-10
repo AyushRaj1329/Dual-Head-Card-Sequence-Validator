@@ -29,19 +29,20 @@ class PreviewWindow(QDialog):
         if not expected_cards:
             layout.addWidget(QLabel("No expected cards loaded."))
         else:
-            table = QTableWidget(len(expected_cards), 2)
-            table.setHorizontalHeaderLabels(["NUMCARD", "ICCID"])
+            table = QTableWidget(len(expected_cards), 3)
+            table.setHorizontalHeaderLabels(["NUMCARD", "Left QR (ICCID)", "Right QR (IMSI)"])
             table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
             header = table.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
 
-            for row, (numcard, iccid) in enumerate(expected_cards):
+            for row, (numcard, left_qr, right_qr) in enumerate(expected_cards):
                 table.setItem(row, 0, QTableWidgetItem(str(numcard)))
-                table.setItem(row, 1, QTableWidgetItem(str(iccid)))
+                table.setItem(row, 1, QTableWidgetItem(str(left_qr)))
+                table.setItem(row, 2, QTableWidgetItem(str(right_qr)))
             
             layout.addWidget(table)
-            table.resizeColumnToContents(1) # Resize ICCID column based on content
 
         self.setMinimumSize(600, 400) # Set a minimum size for the dialog
 
@@ -271,7 +272,7 @@ class FileManagementWindow(QMainWindow):
         if file_path:
             try:
                 with open(file_path, 'w', newline='', encoding='utf-8') as f:
-                    writer = csv.DictWriter(f, fieldnames=['index', 'timestamp', 'scanned_code', 'expected_code', 'status'])
+                    writer = csv.DictWriter(f, fieldnames=['index', 'timestamp', 'scanned_code', 'expected_code', 'status', 'scanned_side'])
                     writer.writeheader()
                     
                     # Prepare data with the correct NUMCARD index
@@ -283,16 +284,19 @@ class FileManagementWindow(QMainWindow):
                         expected_code = log_entry.get("expected_code", "N/A")
                         display_numcard = "---"  # Default placeholder
 
-                        if expected_code in self.app_state.iccid_to_numcard:
-                            display_numcard = str(self.app_state.iccid_to_numcard[expected_code])
-                        elif expected_code == "N/A":
-                            display_numcard = "N/A"
-                        elif expected_code == "End of Sequence":
-                            display_numcard = "End"
-                        elif log_entry.get("status") == "SKIPPED":
-                            display_numcard = str(self.app_state.iccid_to_numcard.get(expected_code, "---"))
-                        elif log_entry.get("status") == "NOT OK":
-                            display_numcard = str(self.app_state.iccid_to_numcard.get(expected_code, "---"))
+                        # Find the numcard by searching both left and right QR codes
+                        found_num = False
+                        for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
+                            if expected_code == left_qr or expected_code == right_qr:
+                                display_numcard = str(numcard)
+                                found_num = True
+                                break
+                        
+                        if not found_num:
+                            if expected_code == "N/A":
+                                display_numcard = "N/A"
+                            elif expected_code == "End of Sequence":
+                                display_numcard = "End"
 
                         indexed_entry['index'] = display_numcard
 

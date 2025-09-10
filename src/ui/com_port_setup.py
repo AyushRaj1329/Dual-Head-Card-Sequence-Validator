@@ -14,6 +14,7 @@ class ComPortSetupWindow(QMainWindow):
         super().__init__()
         self.app_state = app_state
         self.setWindowTitle("COM Port Configuration")
+        self.setMinimumSize(800, 700)
         
         self.update_theme(self.app_state.current_theme) # Set initial theme
         self.app_state.theme_changed.connect(self.update_theme) # Connect to theme changes
@@ -143,6 +144,8 @@ class ComPortSetupWindow(QMainWindow):
         self.app_state.stop_bits = float(self.stop_bits_combo.currentText())
         self.app_state.timeout = float(self.timeout_combo.currentText())
 
+        
+
         # Apply Input Port
         self.app_state.selected_com_port = input_port if "No ports" not in input_port and input_port else None
         if self.app_state.selected_com_port:
@@ -209,6 +212,8 @@ class ComPortSetupWindow(QMainWindow):
         self.parity_combo.setCurrentText({'N': 'None', 'E': 'Even', 'O': 'Odd'}.get(self.app_state.parity, 'None'))
         self.stop_bits_combo.setCurrentText(str(self.app_state.stop_bits))
         self.timeout_combo.setCurrentText(str(self.app_state.timeout))
+
+        
         
         # Unblock signals
         self.input_port_combo.blockSignals(False)
