@@ -4,64 +4,15 @@ from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout, 
                              QVBoxLayout, QFrame, QFileDialog, QLineEdit, QMessageBox, QDialog,
                              QTableWidget, QTableWidgetItem, QHeaderView, QListWidget, QDialogButtonBox)
+
+
+
+
 from PyQt6.QtCore import Qt
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
-from .widgets import ClockWidget # Import the new ClockWidget
+from .widgets import ClockWidget
 import constants
 
-# ... (PreviewWindow and SelectStartCardDialog classes are the same) ...
-class PreviewWindow(QDialog):
-    def __init__(self, expected_cards, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Preview Expected Cards")
-
-        self.setStyleSheet(parent.styleSheet())
-        layout = QVBoxLayout(self)
-        if not expected_cards:
-            layout.addWidget(QLabel("No expected cards loaded."))
-        else:
-            table = QTableWidget(len(expected_cards), 2)
-            table.setHorizontalHeaderLabels(["NUMCARD", "ICCID"])
-            table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-            for row, (numcard, iccid) in enumerate(expected_cards):
-                table.setItem(row, 0, QTableWidgetItem(str(numcard)))
-                table.setItem(row, 1, QTableWidgetItem(str(iccid)))
-            layout.addWidget(table)
-
-class SelectStartCardDialog(QDialog):
-    def __init__(self, expected_cards, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Select Starting Card")
-
-        self.setStyleSheet(parent.styleSheet())
-        self.selected_index = -1
-        layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Select the NUMCARD to start processing from:"))
-        self.card_list_widget = QListWidget()
-        for numcard, iccid in expected_cards:
-            self.card_list_widget.addItem(f"{numcard} (ICCID: {iccid})")
-        layout.addWidget(self.card_list_widget)
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
-
-    def get_selected_index(self):
-        return self.card_list_widget.currentRow()
-
-
-class FileManagementWindow(QMainWindow):
-    # ... (__init__ is the same) ...
-    def __init__(self, app_state):
-        super().__init__()
-        self.app_state = app_state
-        self.setWindowTitle("File Management")
-        
-        from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
-from .widgets import ClockWidget # Import the new ClockWidget
-
-# ... (PreviewWindow and SelectStartCardDialog classes are the same) ...
 class PreviewWindow(QDialog):
     def __init__(self, expected_cards, parent=None):
         super().__init__(parent)
@@ -81,38 +32,18 @@ class PreviewWindow(QDialog):
             table = QTableWidget(len(expected_cards), 2)
             table.setHorizontalHeaderLabels(["NUMCARD", "ICCID"])
             table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            header = table.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+
             for row, (numcard, iccid) in enumerate(expected_cards):
                 table.setItem(row, 0, QTableWidgetItem(str(numcard)))
                 table.setItem(row, 1, QTableWidgetItem(str(iccid)))
+            
             layout.addWidget(table)
+            table.resizeColumnToContents(1) # Resize ICCID column based on content
 
-class SelectStartCardDialog(QDialog):
-    def __init__(self, expected_cards, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Select Starting Card")
-
-        # Safely inherit styles from parent if available
-        if parent and hasattr(parent, 'styleSheet'):
-            try:
-                self.setStyleSheet(parent.styleSheet())
-            except:
-                pass  # Ignore style errors
-
-        self.selected_index = -1
-        layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Select the NUMCARD to start processing from:"))
-        self.card_list_widget = QListWidget()
-        for numcard, iccid in expected_cards:
-            self.card_list_widget.addItem(f"{numcard} (ICCID: {iccid})")
-        layout.addWidget(self.card_list_widget)
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
-
-    def get_selected_index(self):
-        return self.card_list_widget.currentRow()
+        self.setMinimumSize(600, 400) # Set a minimum size for the dialog
 
 
 class FileManagementWindow(QMainWindow):
@@ -144,6 +75,7 @@ class FileManagementWindow(QMainWindow):
         main_layout.addStretch()
 
         self.app_state.state_changed.connect(self.update_ui)
+        self.app_state.start_card_scan_complete.connect(self.handle_start_card_scan_complete)
         self.update_ui()
 
 
@@ -200,11 +132,11 @@ class FileManagementWindow(QMainWindow):
         layout.setContentsMargins(25, 20, 25, 20)
         title = QLabel("Card Sequence")
         title.setObjectName("h2")
-        self.set_card_btn = QPushButton("Set Start Card from List")
-        self.set_card_btn.setObjectName("primary")
-        self.set_card_btn.clicked.connect(self.select_start_card_dialog)
+        self.scan_start_card_btn = QPushButton("Scan Start Card")
+        self.scan_start_card_btn.setObjectName("primary")
+        self.scan_start_card_btn.clicked.connect(self.app_state.scan_and_set_start_card)
         layout.addWidget(title)
-        layout.addWidget(self.set_card_btn)
+        layout.addWidget(self.scan_start_card_btn)
         parent_layout.addWidget(frame)
 
     def create_log_management(self, parent_layout):
@@ -259,10 +191,11 @@ class FileManagementWindow(QMainWindow):
     def update_ui(self):
         has_file = bool(self.app_state.expected_cards)
         has_logs = bool(self.app_state.log_data)
-        
+        has_start_card_port = bool(self.app_state.start_card_scan_port)
+
         self.preview_btn.setEnabled(has_file)
         self.clear_btn.setEnabled(has_file)
-        self.set_card_btn.setEnabled(has_file)
+        self.scan_start_card_btn.setEnabled(has_file and has_start_card_port)
         self.download_btn.setEnabled(has_logs)
         self.clear_logs_btn.setEnabled(has_logs)
         
@@ -324,18 +257,11 @@ class FileManagementWindow(QMainWindow):
         dialog = PreviewWindow(self.app_state.expected_cards, self)
         dialog.exec()
 
-    def select_start_card_dialog(self):
-        self.app_state.stop_scanning()
-        if not self.app_state.expected_cards:
-            QMessageBox.warning(self, "Warning", "Load a file before setting a start card.")
-            return
-        dialog = SelectStartCardDialog(self.app_state.expected_cards, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            selected_index = dialog.get_selected_index()
-            if selected_index != -1:
-                self.app_state.set_start_index(selected_index)
-                selected_card_num = self.app_state.expected_cards[selected_index][0]
-                QMessageBox.information(self, "Success", f"Start card set to {selected_card_num}.")
+    def handle_start_card_scan_complete(self, message, success):
+        if success:
+            QMessageBox.information(self, "Success", message)
+        else:
+            QMessageBox.warning(self, "Scan Failed", message)
 
     def download_logs(self):
         if not self.app_state.log_data:

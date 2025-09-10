@@ -87,6 +87,7 @@ class AppState(QObject):
     output_com_status_changed = pyqtSignal(str, str)
     com_data_received = pyqtSignal(str)
     theme_changed = pyqtSignal(str)
+    start_card_scan_complete = pyqtSignal(str, bool) # Message, success
 
     mismatch_found_in_sequence = pyqtSignal(str, int, int)
     # --- MODIFIED: The mismatch_not_found signal is no longer needed ---
@@ -95,6 +96,7 @@ class AppState(QObject):
     def __init__(self):
         super().__init__()
         self.selected_com_port = None
+        self.start_card_scan_port = None
         self.com_port_reader = None
         self.is_scanning = False
         self.output_com_writer = ComPortWriter()
@@ -139,6 +141,13 @@ class AppState(QObject):
                     if self.selected_output_port not in available_ports:
                         self.selected_output_port = None
                         self.output_com_status_changed.emit("Previously selected output COM port not found. Please select a new one.", "orange")
+                self.start_card_scan_port = cache_data.get('start_card_scan_port')
+                if self.start_card_scan_port:
+                    available_ports = [port.device for port in serial.tools.list_ports.comports()]
+                    if self.start_card_scan_port not in available_ports:
+                        self.start_card_scan_port = None
+                        # Optionally, emit a signal for the UI to know this port is gone
+                        self.com_status_changed.emit("Previously selected start card scan port not found. Please select a new one.", "orange")
                 self.baud_rate = cache_data.get('baud_rate', 115200)
                 self.data_bits = cache_data.get('data_bits', 8)
                 self.parity = cache_data.get('parity', 'N')
@@ -160,6 +169,7 @@ class AppState(QObject):
     def save_cache(self):
         cache_data = {
             'selected_com_port': self.selected_com_port,
+            'start_card_scan_port': self.start_card_scan_port,
             'selected_output_port': self.selected_output_port,
             'baud_rate': self.baud_rate,
             'data_bits': self.data_bits,
@@ -268,6 +278,7 @@ class AppState(QObject):
         self.stop_scanning()
         self.disconnect_output_port()
         self.selected_com_port = None
+        self.start_card_scan_port = None # Also clear this port
         self.state_changed.emit()
         self.save_cache()
 
@@ -335,6 +346,59 @@ class AppState(QObject):
         self.current_theme = theme_name
         self.save_cache()
         self.theme_changed.emit(theme_name)
+
+    def scan_and_set_start_card(self):
+        if not self.start_card_scan_port:
+            self.start_card_scan_complete.emit("Start card scan port not selected.", False)
+            return
+        if self.is_scanning:
+            self.start_card_scan_complete.emit("Cannot scan for start card while main scan is active.", False)
+            return
+
+        thread = threading.Thread(target=self._scan_for_start_card_worker)
+        thread.daemon = True
+        thread.start()
+
+    def _scan_for_start_card_worker(self):
+        try:
+            ser = serial.Serial(
+                port=self.start_card_scan_port,
+                baudrate=self.baud_rate,
+                bytesize=self.data_bits,
+                parity=self.parity,
+                stopbits=self.stop_bits,
+                timeout=5 # 5-second timeout to wait for a card
+            )
+        except serial.SerialException as e:
+            self.start_card_scan_complete.emit(f"Error opening port {self.start_card_scan_port}: {e}", False)
+            return
+
+        try:
+            raw_data = ser.readline()
+            if not raw_data:
+                self.start_card_scan_complete.emit("No card scanned (timeout).", False)
+                return
+
+            scanned_code = raw_data.decode(errors='ignore').strip()
+            scanned_code = re.sub(r'[^\x20-\x7E]', '', scanned_code) # Clean the input
+
+            if not scanned_code:
+                self.start_card_scan_complete.emit("No data received from scan.", False)
+                return
+
+            if scanned_code in self.iccid_to_index:
+                found_index = self.iccid_to_index[scanned_code]
+                self.set_start_index(found_index)
+                card_num = self.expected_cards[found_index][0]
+                self.start_card_scan_complete.emit(f"Start card set to {card_num} ({scanned_code})", True)
+            else:
+                self.start_card_scan_complete.emit(f"Scanned card {scanned_code} not found in the loaded file.", False)
+
+        except Exception as e:
+            self.start_card_scan_complete.emit(f"An error occurred during scan: {e}", False)
+        finally:
+            if ser.is_open:
+                ser.close()
 
     def send_output_signal(self, status):
         if not self.output_com_writer.is_connected:

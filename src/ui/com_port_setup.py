@@ -35,6 +35,7 @@ class ComPortSetupWindow(QMainWindow):
         self.create_settings_section(main_layout)
         self.create_action_buttons(main_layout)
         self.create_status_log(main_layout)
+        self.start_card_input_port_combo = QComboBox()
         
         self.app_state.state_changed.connect(self.update_ui_from_state)
         self.app_state.com_status_changed.connect(self.add_log_entry)
@@ -43,6 +44,7 @@ class ComPortSetupWindow(QMainWindow):
         # --- MODIFIED: Connect each dropdown to its own specific update function ---
         self.input_port_combo.currentIndexChanged.connect(self._on_input_port_changed)
         self.output_port_combo.currentIndexChanged.connect(self._on_output_port_changed)
+        self.start_card_input_port_combo.currentIndexChanged.connect(self._on_start_card_port_changed)
         
         self.refresh_ports()
         self.populate_format_dropdown()
@@ -51,35 +53,51 @@ class ComPortSetupWindow(QMainWindow):
 
     # --- NEW: Independent handler for the input dropdown ---
     def _on_input_port_changed(self):
-        selected_input = self.input_port_combo.currentText()
-        current_output = self.output_port_combo.currentText()
-        
-        self.output_port_combo.blockSignals(True)
-        self.output_port_combo.clear()
-        
-        output_ports = [""] + [p for p in self.all_ports if p != selected_input] or ["No ports available"]
-        self.output_port_combo.addItems(output_ports)
-        
-        if current_output in output_ports:
-            self.output_port_combo.setCurrentText(current_output)
-            
-        self.output_port_combo.blockSignals(False)
+        self._update_port_availability()
 
     # --- NEW: Independent handler for the output dropdown ---
     def _on_output_port_changed(self):
-        selected_output = self.output_port_combo.currentText()
-        current_input = self.input_port_combo.currentText()
-        
-        self.input_port_combo.blockSignals(True)
-        self.input_port_combo.clear()
-        
-        input_ports = [""] + [p for p in self.all_ports if p != selected_output] or ["No ports available"]
-        self.input_port_combo.addItems(input_ports)
+        self._update_port_availability()
 
-        if current_input in input_ports:
-            self.input_port_combo.setCurrentText(current_input)
-            
-        self.input_port_combo.blockSignals(False)
+    # --- NEW: Independent handler for the start card dropdown ---
+    def _on_start_card_port_changed(self):
+        self._update_port_availability()
+
+    # --- NEW: Unified method to update all port dropdowns ---
+    def _update_port_availability(self):
+        # Block signals to prevent infinite loops
+        for combo in [self.input_port_combo, self.output_port_combo, self.start_card_input_port_combo]:
+            combo.blockSignals(True)
+
+        # Get current selections
+        selected_input = self.input_port_combo.currentText()
+        selected_output = self.output_port_combo.currentText()
+        selected_start_card = self.start_card_input_port_combo.currentText()
+
+        # Repopulate input_port_combo
+        self.input_port_combo.clear()
+        available_for_input = [p for p in self.all_ports if p not in [selected_output, selected_start_card] or not p]
+        self.input_port_combo.addItems([""] + available_for_input)
+        if selected_input in available_for_input:
+            self.input_port_combo.setCurrentText(selected_input)
+
+        # Repopulate output_port_combo
+        self.output_port_combo.clear()
+        available_for_output = [p for p in self.all_ports if p not in [selected_input, selected_start_card] or not p]
+        self.output_port_combo.addItems([""] + available_for_output)
+        if selected_output in available_for_output:
+            self.output_port_combo.setCurrentText(selected_output)
+
+        # Repopulate start_card_input_port_combo
+        self.start_card_input_port_combo.clear()
+        available_for_start = [p for p in self.all_ports if p not in [selected_input, selected_output] or not p]
+        self.start_card_input_port_combo.addItems([""] + available_for_start)
+        if selected_start_card in available_for_start:
+            self.start_card_input_port_combo.setCurrentText(selected_start_card)
+
+        # Unblock signals
+        for combo in [self.input_port_combo, self.output_port_combo, self.start_card_input_port_combo]:
+            combo.blockSignals(False)
 
     def refresh_ports(self):
         """Fetches the latest list of COM ports and updates the dropdowns."""
@@ -87,16 +105,20 @@ class ComPortSetupWindow(QMainWindow):
         
         self.input_port_combo.blockSignals(True)
         self.output_port_combo.blockSignals(True)
+        self.start_card_input_port_combo.blockSignals(True)
 
         self.input_port_combo.clear()
         self.output_port_combo.clear()
+        self.start_card_input_port_combo.clear()
         
         port_list = [""] + self.all_ports if self.all_ports else ["No ports available"]
         self.input_port_combo.addItems(port_list)
         self.output_port_combo.addItems(port_list)
+        self.start_card_input_port_combo.addItems(port_list)
 
         self.input_port_combo.blockSignals(False)
         self.output_port_combo.blockSignals(False)
+        self.start_card_input_port_combo.blockSignals(False)
         
         # Let the state update trigger the filtering logic
         self.update_ui_from_state()
@@ -106,9 +128,12 @@ class ComPortSetupWindow(QMainWindow):
     def apply_configuration(self):
         input_port = self.input_port_combo.currentText()
         output_port = self.output_port_combo.currentText()
-        
-        if input_port and input_port == output_port:
-            QMessageBox.warning(self, "Configuration Error", "Input and Output ports cannot be the same.")
+        start_card_port = self.start_card_input_port_combo.currentText()
+
+        # Check for port conflicts
+        ports = [p for p in [input_port, output_port, start_card_port] if p and "No ports" not in p]
+        if len(ports) != len(set(ports)):
+            QMessageBox.warning(self, "Configuration Error", "Each COM port (Input, Output, Start Card) must be unique.")
             return
 
         # Apply settings (unchanged)
@@ -116,13 +141,18 @@ class ComPortSetupWindow(QMainWindow):
         self.app_state.data_bits = int(self.data_bits_combo.currentText())
         self.app_state.parity = {'None': 'N', 'Even': 'E', 'Odd': 'O'}[self.parity_combo.currentText()]
         self.app_state.stop_bits = float(self.stop_bits_combo.currentText())
-        # --- MODIFIED: Read value as a float instead of an int ---
         self.app_state.timeout = float(self.timeout_combo.currentText())
 
+        # Apply Input Port
         self.app_state.selected_com_port = input_port if "No ports" not in input_port and input_port else None
         if self.app_state.selected_com_port:
             self.add_log_entry(f"Input port set to {input_port}", "white")
-        
+
+        # Apply Start Card Scan Port
+        self.app_state.start_card_scan_port = start_card_port if "No ports" not in start_card_port and start_card_port else None
+        if self.app_state.start_card_scan_port:
+            self.add_log_entry(f"Start card scan port set to {start_card_port}", "white")
+
         # Apply Output Port
         if output_port and "No ports" not in output_port:
             self.app_state.connect_output_port(output_port)
@@ -138,6 +168,7 @@ class ComPortSetupWindow(QMainWindow):
         # Temporarily block signals to prevent redundant updates
         self.input_port_combo.blockSignals(True)
         self.output_port_combo.blockSignals(True)
+        self.start_card_input_port_combo.blockSignals(True)
 
         # Update input port UI
         if self.app_state.selected_com_port:
@@ -160,6 +191,17 @@ class ComPortSetupWindow(QMainWindow):
             self.output_status_text.setText("Disconnected")
             self.output_status_text.setObjectName("statusDisconnected")
         self.output_status_text.style().unpolish(self.output_status_text); self.output_status_text.style().polish(self.output_status_text)
+
+        # Update start card scan port UI
+        if self.app_state.start_card_scan_port:
+            self.start_card_input_port_combo.setCurrentText(self.app_state.start_card_scan_port)
+            self.start_card_input_status_text.setText(f"Selected: {self.app_state.start_card_scan_port}")
+            self.start_card_input_status_text.setObjectName("statusOK")
+        else:
+            self.start_card_input_port_combo.setCurrentIndex(0)
+            self.start_card_input_status_text.setText("Not Configured")
+            self.start_card_input_status_text.setObjectName("statusWarning")
+        self.start_card_input_status_text.style().unpolish(self.start_card_input_status_text); self.start_card_input_status_text.style().polish(self.start_card_input_status_text)
             
         # Update settings UI (unchanged)
         self.baud_rate_combo.setCurrentText(str(self.app_state.baud_rate))
@@ -171,10 +213,10 @@ class ComPortSetupWindow(QMainWindow):
         # Unblock signals
         self.input_port_combo.blockSignals(False)
         self.output_port_combo.blockSignals(False)
+        self.start_card_input_port_combo.blockSignals(False)
         
         # Manually trigger the filtering after state is loaded
-        self._on_input_port_changed()
-        self._on_output_port_changed()
+        self._update_port_availability()
     
     # ... (The rest of the file is unchanged) ...
     def create_header(self, parent_layout):
@@ -208,15 +250,25 @@ class ComPortSetupWindow(QMainWindow):
         layout = QVBoxLayout(section)
         layout.setContentsMargins(25, 20, 25, 20)
         layout.setSpacing(15)
-        title = QLabel("Scanner Input Port")
+        
+        title = QLabel("Input Ports")
         title.setObjectName("h2")
+        layout.addWidget(title)
+
+        # Main Scanner Input
+        layout.addWidget(QLabel("Scanner Input Port:"))
         self.input_port_combo = QComboBox()
         self.input_status_text = QLabel()
-        
-        layout.addWidget(title)
-        layout.addWidget(QLabel("Select Port:"))
         layout.addWidget(self.input_port_combo)
         layout.addWidget(self.input_status_text)
+
+        # Start Card Scanner Input
+        layout.addWidget(QLabel("Start Card Scan Port:"))
+        self.start_card_input_port_combo = QComboBox()
+        self.start_card_input_status_text = QLabel()
+        layout.addWidget(self.start_card_input_port_combo)
+        layout.addWidget(self.start_card_input_status_text)
+
         layout.addStretch()
         return section
 
@@ -240,6 +292,8 @@ class ComPortSetupWindow(QMainWindow):
         layout.addWidget(self.output_status_text)
         layout.addStretch()
         return section
+
+    
 
     def create_settings_section(self, parent_layout):
         frame = QFrame()
