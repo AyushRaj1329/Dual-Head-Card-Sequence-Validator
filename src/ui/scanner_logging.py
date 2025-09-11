@@ -26,7 +26,7 @@ class ScannerLoggingWindow(QMainWindow):
     def __init__(self, app_state):
         super().__init__()
         self.app_state = app_state
-        self.setWindowTitle("Scanner & Logging")
+        self.setWindowTitle("Live Scanner Feed & Validation Log")
         
         self.update_theme(self.app_state.current_theme) # Set initial theme
         self.app_state.theme_changed.connect(self.update_theme) # Connect to theme changes
@@ -79,12 +79,12 @@ class ScannerLoggingWindow(QMainWindow):
 
     def show_approval_dialog(self, scanned_code, num_skipped, future_index):
         dialog = ApprovalDialog(
-            "Mismatch Detected",
-            f"The scanned card was found {num_skipped} position(s) ahead in the sequence.\n\n" 
-            "Do you want to skip and continue from the new position?",
+            "Sequence Mismatch",
+            f"The scanned card ({scanned_code}) was found {num_skipped} position(s) ahead of the expected sequence. Would you like to advance the sequence to this card?",
             parent=self
         )
         approved = dialog.exec()
+        self.app_state.clear_input_buffer() # Clear the buffer
 
         if approved:
             self.stacked_layout.setCurrentIndex(1) # Show loading indicator
@@ -99,9 +99,9 @@ class ScannerLoggingWindow(QMainWindow):
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("Existing Logs Found")
             msg_box.setText("There are existing logs in the table.")
-            msg_box.setInformativeText("There are existing logs in the table.\nDo you want to clear the logs before starting a new scan?\n\nYou can save the logs from the File Management window.")
-            clear_button = msg_box.addButton("Clear and Start", QMessageBox.ButtonRole.AcceptRole)
-            continue_button = msg_box.addButton("Continue Scanning", QMessageBox.ButtonRole.DestructiveRole)
+            msg_box.setInformativeText("There are existing logs in the table.\nDo you want to clear the logs before starting a new scan?\n\nYou can save the logs from the File & Log Management window.")
+            clear_button = msg_box.addButton("Clear Logs and Start", QMessageBox.ButtonRole.AcceptRole)
+            continue_button = msg_box.addButton("Continue with Existing Logs", QMessageBox.ButtonRole.DestructiveRole)
             cancel_button = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
             msg_box.exec()
 
@@ -119,14 +119,14 @@ class ScannerLoggingWindow(QMainWindow):
 
     def create_header(self, parent_layout):
         layout = QHBoxLayout()
-        title = QLabel("Scanner & Logging")
+        title = QLabel("Live Scanner Feed & Validation Log")
         title.setObjectName("h1")
 
-        self.start_btn = QPushButton("Start Scanning")
+        self.start_btn = QPushButton("Start Validation")
         self.start_btn.setObjectName("primary")
         self.start_btn.clicked.connect(self.start_scanning_clicked)
 
-        self.stop_btn = QPushButton("Stop Scanning")
+        self.stop_btn = QPushButton("Stop Validation")
         self.stop_btn.setObjectName("secondary")
         self.stop_btn.clicked.connect(self.app_state.stop_scanning)
 
@@ -149,9 +149,9 @@ class ScannerLoggingWindow(QMainWindow):
         self.current_card_label = QLabel()
         self.next_card_label = QLabel()
 
-        columns_layout.addWidget(self.create_display_column("Scanned Card", self.scanner_input_label))
-        columns_layout.addWidget(self.create_display_column("Last Compared Card", self.current_card_label))
-        columns_layout.addWidget(self.create_display_column("Current Expected Card", self.next_card_label))
+        columns_layout.addWidget(self.create_display_column("Last Scanned ID", self.scanner_input_label))
+        columns_layout.addWidget(self.create_display_column("Previous Validated ID", self.current_card_label))
+        columns_layout.addWidget(self.create_display_column("Next Expected ID", self.next_card_label))
 
         layout.addLayout(columns_layout)
         parent_layout.addWidget(frame)
@@ -178,7 +178,7 @@ class ScannerLoggingWindow(QMainWindow):
         layout.setContentsMargins(25,20,25,25)
 
         header_layout = QHBoxLayout()
-        title = QLabel("Validation Log")
+        title = QLabel("Scan Validation Log")
         title.setObjectName("h2")
 
         header_layout.addWidget(title)
@@ -186,7 +186,7 @@ class ScannerLoggingWindow(QMainWindow):
 
         self.log_table = QTableWidget()
         self.log_table.setColumnCount(6)
-        self.log_table.setHorizontalHeaderLabels(["Index", "Timestamp", "Scanned Code", "Expected Code", "Status", "Scanned Side"])
+        self.log_table.setHorizontalHeaderLabels(["Entry #", "Time", "Scanned ID", "Expected ID", "Result", "Scan Side"])
         header = self.log_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -380,7 +380,7 @@ class ScannerLoggingWindow(QMainWindow):
             last_log = self.app_state.log_data[-1]
             self.scanner_input_label.setText(last_log["scanned_code"])
         else:
-            self.scanner_input_label.setText("Waiting for scan...")
+            self.scanner_input_label.setText("Awaiting Scan Input...")
 
     def perform_search(self, search_text):
         pass

@@ -1,6 +1,6 @@
 # src/ui/widgets.py
-from PyQt6.QtWidgets import QLabel, QDialog, QVBoxLayout, QDialogButtonBox
-from PyQt6.QtCore import QTimer, QTime
+from PyQt6.QtWidgets import QLabel, QDialog, QVBoxLayout, QDialogButtonBox, QPushButton
+from PyQt6.QtCore import QTimer, QTime, pyqtSignal, Qt
 from datetime import datetime
 
 class ClockWidget(QLabel):
@@ -55,3 +55,38 @@ class ApprovalDialog(QDialog):
         # Set minimum size for better readability
         self.setMinimumWidth(400)
         self.setMinimumHeight(150)
+
+class ScanPromptDialog(QDialog):
+    """A non-modal dialog to prompt the user to scan a card."""
+    cancelled = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Scan Prompt")
+        self.setWindowModality(Qt.WindowModality.NonModal)
+
+        if parent and hasattr(parent, 'styleSheet'):
+            try:
+                self.setStyleSheet(parent.styleSheet())
+            except: pass
+
+        layout = QVBoxLayout(self)
+        self.prompt_label = QLabel("Please scan a card to proceed.")
+        self.prompt_label.setWordWrap(True)
+        self.prompt_label.setObjectName("h2")
+        self.prompt_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("secondary")
+        cancel_button.clicked.connect(self.reject)
+
+        layout.addWidget(self.prompt_label)
+        layout.addWidget(cancel_button)
+        self.setMinimumWidth(400)
+
+    def update_prompt(self, message):
+        self.prompt_label.setText(message)
+
+    def reject(self):
+        self.cancelled.emit()
+        super().reject()

@@ -4,6 +4,7 @@ import threading
 import re # Re-add the import for regular expressions
 import json
 import os
+import sys
 from datetime import datetime
 from PyQt6.QtCore import QObject, pyqtSignal
 from appdirs import user_data_dir
@@ -25,6 +26,11 @@ def get_cache_file_path():
 
 def get_windows_theme():
     """Detects the current Windows theme (light or dark) for apps."""
+    # Theme detection using the registry is only supported on Windows 10 and newer.
+    # For older systems (like Windows 7), default to 'light' theme.
+    if sys.platform == 'win32' and sys.getwindowsversion().major < 10:
+        return "light"
+    
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                              r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
@@ -33,7 +39,8 @@ def get_windows_theme():
         winreg.CloseKey(key)
         return "light" if theme_value == 1 else "dark"
     except Exception:
-        return "dark" # Default to dark if detection fails (e.g., not Windows)
+        # Default to dark if detection fails for any other reason
+        return "dark"
 
 class ComPortReader:
     def __init__(self, port, baudrate=115200, bytesize=8, parity='N', stopbits=1, timeout=1, callback=None, error_callback=None):
@@ -99,9 +106,13 @@ class AppState(QObject):
     output_com_status_changed = pyqtSignal(str, str)
     com_data_received = pyqtSignal(str)
     theme_changed = pyqtSignal(str)
+    start_card_scan_started = pyqtSignal(str)
     start_card_scan_complete = pyqtSignal(str, bool) # Message, success
 
     mismatch_found_in_sequence = pyqtSignal(str, int, int)
+    card_count_update = pyqtSignal(str, str)  # type, message
+    _single_scan_received = pyqtSignal(str)
+
     # --- MODIFIED: The mismatch_not_found signal is no longer needed ---
     # mismatch_not_found = pyqtSignal(str)
 
@@ -128,8 +139,13 @@ class AppState(QObject):
         self.baud_rate, self.data_bits, self.parity, self.stop_bits, self.timeout = 115200, 8, 'N', 1, 1
         self.current_theme = None # Initialize to None, will be set by load_cache or get_windows_theme
 
+        # Card counting state
+        self.card_count_step = 0  # 0: idle, 1: waiting for first, 2: waiting for second
+        self.first_card_index = -1
+
         self.load_output_formats()
         self.com_data_received.connect(self.handle_com_data)
+        self._single_scan_received.connect(self.process_counted_card)
         self.load_cache() # Load cached theme first
 
         if self.current_theme is None: # If no theme was loaded from cache
@@ -388,6 +404,105 @@ class AppState(QObject):
         self.save_cache()
         self.theme_changed.emit(theme_name)
 
+    def start_card_counting(self):
+        if self.is_scanning:
+            self.card_count_update.emit('error', "Cannot count cards while a scan is active.")
+            return
+        if not self.start_card_scan_port:
+            self.card_count_update.emit('error', "Start card scan port not selected.")
+            return
+        if not self.expected_cards:
+            self.card_count_update.emit('error', "No card file loaded.")
+            return
+
+        self.card_count_step = 1
+        self.card_count_update.emit('prompt', "Scan the FIRST card...")
+        self._get_single_scan_for_counting()
+
+    def cancel_card_counting(self):
+        self.card_count_step = 0
+        self.first_card_index = -1
+        self.card_count_update.emit('result', "Card counting cancelled.")
+
+    def _get_single_scan_for_counting(self):
+        thread = threading.Thread(target=self._scan_for_card_count_worker)
+        thread.daemon = True
+        thread.start()
+
+    def _scan_for_card_count_worker(self):
+        try:
+            ser = serial.Serial(
+                port=self.start_card_scan_port,
+                baudrate=self.baud_rate,
+                bytesize=self.data_bits,
+                parity=self.parity,
+                stopbits=self.stop_bits,
+                timeout=10  # 10-second timeout
+            )
+        except serial.SerialException as e:
+            self.card_count_update.emit('error', f"Error opening port: {e}")
+            self.card_count_step = 0
+            return
+
+        try:
+            self.card_count_update.emit('info', "Waiting for card scan...")
+            raw_data = ser.readline()
+            if not raw_data:
+                self.card_count_update.emit('error', "No card scanned (timeout).")
+                self.card_count_step = 0
+                return
+
+            scanned_code = raw_data.decode(errors='ignore').strip()
+            scanned_code = re.sub(r'[^\x20-\x7E]', '', scanned_code)
+
+            if scanned_code:
+                self._single_scan_received.emit(scanned_code)
+            else:
+                self.card_count_update.emit('error', "No data received from scan.")
+                self.card_count_step = 0
+
+        except Exception as e:
+            self.card_count_update.emit('error', f"An error occurred during scan: {e}")
+            self.card_count_step = 0
+        finally:
+            if ser.is_open:
+                ser.close()
+
+    def process_counted_card(self, scanned_code):
+        # Try to find the card in either left or right QR code lists
+        scanned_index = -1
+        if scanned_code in self.left_qr_to_index:
+            scanned_index = self.left_qr_to_index[scanned_code]
+        elif scanned_code in self.right_qr_to_index:
+            scanned_index = self.right_qr_to_index[scanned_code]
+
+        if scanned_index == -1:
+            self.card_count_update.emit('error', f"Scanned card {scanned_code} not found in the file.")
+            self.card_count_step = 0
+            return
+
+        if self.card_count_step == 1: # This was the first card
+            self.first_card_index = scanned_index
+            self.card_count_step = 2
+            card_num = self.expected_cards[scanned_index][0]
+            self.card_count_update.emit('prompt', f"First card: {card_num}.\nScan the LAST card...")
+            self._get_single_scan_for_counting()
+
+        elif self.card_count_step == 2: # This was the second card
+            last_card_index = scanned_index
+
+            if last_card_index < self.first_card_index:
+                self.card_count_update.emit('error', "Last card cannot come before the first card.")
+            else:
+                count = last_card_index - self.first_card_index + 1
+                first_card_num = self.expected_cards[self.first_card_index][0]
+                last_card_num = self.expected_cards[last_card_index][0]
+                self.card_count_update.emit('result', f"Found {count} cards between \n{first_card_num} and {last_card_num} (inclusive).")
+            
+            # Reset state regardless of outcome
+            self.card_count_step = 0
+            self.first_card_index = -1
+
     def scan_and_set_start_card(self):
         if not self.start_card_scan_port:
             self.start_card_scan_complete.emit("Start card scan port not selected.", False)
@@ -396,6 +511,7 @@ class AppState(QObject):
             self.start_card_scan_complete.emit("Cannot scan for start card while main scan is active.", False)
             return
 
+        self.start_card_scan_started.emit("Waiting for start card scan...")
         thread = threading.Thread(target=self._scan_for_start_card_worker)
         thread.daemon = True
         thread.start()

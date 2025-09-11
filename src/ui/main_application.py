@@ -27,7 +27,7 @@ class HomePage(QMainWindow):
     def __init__(self, app_state):
         super().__init__()
         self.app_state = app_state
-        self.setWindowTitle("Card Sequence Validator")
+        self.setWindowTitle("Card Sequence Validation System")
 
         
 
@@ -166,7 +166,7 @@ class HomePage(QMainWindow):
         title_layout.setSpacing(0)
         title = QLabel("Card Sequence Validator")
         title.setObjectName("mainTitle")
-        subtitle = QLabel("Quality Control System")
+        subtitle = QLabel("Automated Quality Control")
         subtitle.setObjectName("mainSubtitle")
         title_layout.addWidget(title)
         title_layout.addWidget(subtitle)
@@ -190,10 +190,10 @@ class HomePage(QMainWindow):
 
     def update_theme_button_text(self, theme_name):
         if theme_name == "dark":
-            self.theme_button.setText("Switch to Light Mode")
+            self.theme_button.setText("Light Mode")
             self.theme_button.setObjectName("light_theme_toggle") # New objectName for light theme button style
         else:
-            self.theme_button.setText("Switch to Dark Mode")
+            self.theme_button.setText("Dark Mode")
             self.theme_button.setObjectName("dark_theme_toggle") # New objectName for dark theme button style
         self.theme_button.style().unpolish(self.theme_button)
         self.theme_button.style().polish(self.theme_button)
@@ -207,11 +207,11 @@ class HomePage(QMainWindow):
         welcome_layout.setSpacing(10)
         welcome_layout.setContentsMargins(30, 30, 30, 30)
 
-        welcome_title = QLabel("Welcome to the Validator Control Panel")
+        welcome_title = QLabel("Welcome to the Validation Control Panel")
         welcome_title.setObjectName("h2")
         welcome_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        welcome_desc = QLabel("Manage scanner connections, load sequence files, and monitor validation in real-time.")
+        welcome_desc = QLabel("Configure hardware, manage test sequences, and monitor validation processes.")
         welcome_desc.setObjectName("subtitle")
         welcome_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -223,9 +223,9 @@ class HomePage(QMainWindow):
         layout = QHBoxLayout(container)
         layout.setSpacing(30)
         cards_data = [
-            ("Scanner & Logging", "Live scanner input and validation logging", "Open Scanner", "📱", self.open_scanner),
-            ("COM Port Setup", "Configure input and output serial ports", "Configure Ports", "🔧", self.open_com_port_setup),
-            ("File Management", "Manage card sequence files and logs", "Manage Files", "📁", self.open_file_management)
+            ("Scanner & Logging", "Live scanner input and validation logging", "Scanner Control", "📱", self.open_scanner),
+            ("COM Port Setup", "Configure input and output serial ports", "Port Configuration", "🔧", self.open_com_port_setup),
+            ("File Management", "Manage card sequence files and logs", "File & Log Management", "📁", self.open_file_management)
         ]
         for title, desc, btn_text, icon, callback in cards_data:
             layout.addWidget(self.create_feature_card(title, desc, btn_text, icon, callback), 1)
@@ -364,11 +364,11 @@ class HomePage(QMainWindow):
     def toggle_theme(self):
         if self.current_theme == "dark":
             self.current_theme = "light"
-            self.theme_button.setText("Switch to Dark Mode")
+            self.theme_button.setText("Dark Mode")
             self.theme_button.setObjectName("dark_theme_toggle") # Apply dark theme button style
         else:
             self.current_theme = "dark"
-            self.theme_button.setText("Switch to Light Mode")
+            self.theme_button.setText("Light Mode")
             self.theme_button.setObjectName("light_theme_toggle") # Apply light theme button style
 
         self.apply_theme(self.current_theme)

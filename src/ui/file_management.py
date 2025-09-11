@@ -10,13 +10,13 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushBu
 
 from PyQt6.QtCore import Qt
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
-from .widgets import ClockWidget
+from .widgets import ClockWidget, ScanPromptDialog
 import constants
 
 class PreviewWindow(QDialog):
     def __init__(self, expected_cards, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Preview Expected Cards")
+        self.setWindowTitle("Preview Sequence Data")
 
         # Safely inherit styles from parent if available
         if parent and hasattr(parent, 'styleSheet'):
@@ -30,7 +30,7 @@ class PreviewWindow(QDialog):
             layout.addWidget(QLabel("No expected cards loaded."))
         else:
             table = QTableWidget(len(expected_cards), 3)
-            table.setHorizontalHeaderLabels(["NUMCARD", "Left QR (ICCID)", "Right QR (IMSI)"])
+            table.setHorizontalHeaderLabels(["Card Number", "Left QR (ICCID)", "Right QR (IMSI)"])
             table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
             header = table.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
@@ -52,16 +52,11 @@ class FileManagementWindow(QMainWindow):
     def __init__(self, app_state):
         super().__init__()
         self.app_state = app_state
-        self.setWindowTitle("File Management")
+        self.setWindowTitle("Sequence File Management")
+        self.card_count_prompt_dialog = None
         
         self.update_theme(self.app_state.current_theme) # Set initial theme
         self.app_state.theme_changed.connect(self.update_theme) # Connect to theme changes
-
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(40, 30, 40, 30)
-        main_layout.setSpacing(25)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -77,6 +72,7 @@ class FileManagementWindow(QMainWindow):
 
         self.app_state.state_changed.connect(self.update_ui)
         self.app_state.start_card_scan_complete.connect(self.handle_start_card_scan_complete)
+        self.app_state.card_count_update.connect(self.handle_card_count_update)
         self.update_ui()
 
 
@@ -99,10 +95,10 @@ class FileManagementWindow(QMainWindow):
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(25, 20, 25, 20)
         layout.setSpacing(15)
-        title = QLabel("File Operations")
+        title = QLabel("Sequence File Operations")
         title.setObjectName("h2")
         
-        file_button = QPushButton("📁 Select Card Sequence File")
+        file_button = QPushButton("📁 Load Sequence File")
         file_button.setObjectName("primary")
         file_button.clicked.connect(self.select_file)
         
@@ -110,10 +106,10 @@ class FileManagementWindow(QMainWindow):
         self.file_status.setObjectName("subtitle")
 
         button_layout = QHBoxLayout()
-        self.preview_btn = QPushButton("👁 Preview File")
+        self.preview_btn = QPushButton("👁 Preview Sequence")
         self.preview_btn.setObjectName("secondary")
         self.preview_btn.clicked.connect(self.preview_file)
-        self.clear_btn = QPushButton("🗑 Clear Upload")
+        self.clear_btn = QPushButton("🗑 Clear Sequence")
         self.clear_btn.setObjectName("secondary")
         self.clear_btn.clicked.connect(self.clear_file)
         
@@ -131,13 +127,28 @@ class FileManagementWindow(QMainWindow):
         frame.setObjectName("panel")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(25, 20, 25, 20)
-        title = QLabel("Card Sequence")
+        layout.setSpacing(15)
+
+        title = QLabel("Sequence Control Tools")
         title.setObjectName("h2")
+        layout.addWidget(title)
+
+        # Use a horizontal layout for the buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(15)
+
         self.scan_start_card_btn = QPushButton("Scan Start Card")
         self.scan_start_card_btn.setObjectName("primary")
         self.scan_start_card_btn.clicked.connect(self.app_state.scan_and_set_start_card)
-        layout.addWidget(title)
-        layout.addWidget(self.scan_start_card_btn)
+        button_layout.addWidget(self.scan_start_card_btn)
+
+        self.count_cards_btn = QPushButton("Count Card Range")
+        self.count_cards_btn.setObjectName("primary")
+        self.count_cards_btn.clicked.connect(self.app_state.start_card_counting)
+        button_layout.addWidget(self.count_cards_btn)
+
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
         parent_layout.addWidget(frame)
 
     def create_log_management(self, parent_layout):
@@ -145,14 +156,14 @@ class FileManagementWindow(QMainWindow):
         frame.setObjectName("panel")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(25, 20, 25, 20)
-        title = QLabel("Log Management")
+        title = QLabel("Validation Log Management")
         title.setObjectName("h2")
         
         button_layout = QHBoxLayout()
-        self.download_btn = QPushButton("📥 Download Logs")
+        self.download_btn = QPushButton("📥 Export Logs")
         self.download_btn.setObjectName("primary")
         self.download_btn.clicked.connect(self.download_logs)
-        self.clear_logs_btn = QPushButton("🗑 Clear Logs")
+        self.clear_logs_btn = QPushButton("🗑 Clear Validation Logs")
         self.clear_logs_btn.setObjectName("secondary")
         self.clear_logs_btn.clicked.connect(self.clear_logs)
         button_layout.addWidget(self.download_btn)
@@ -167,10 +178,10 @@ class FileManagementWindow(QMainWindow):
         self.scanned_ok_label = QLabel("0")
         self.error_not_ok_label = QLabel("0")
         self.skipped_label = QLabel("0")
-        stats_layout.addWidget(self.create_stat("Total Scanned:", self.total_scanned_label))
-        stats_layout.addWidget(self.create_stat("Success (OK):", self.scanned_ok_label))
-        stats_layout.addWidget(self.create_stat("Error (NOT OK):", self.error_not_ok_label))
-        stats_layout.addWidget(self.create_stat("Skipped:", self.skipped_label))
+        stats_layout.addWidget(self.create_stat("Total Scans:", self.total_scanned_label))
+        stats_layout.addWidget(self.create_stat("Successful Scans:", self.scanned_ok_label))
+        stats_layout.addWidget(self.create_stat("Failed Scans:", self.error_not_ok_label))
+        stats_layout.addWidget(self.create_stat("Skipped Entries:", self.skipped_label))
         
         layout.addWidget(title)
         layout.addLayout(button_layout)
@@ -197,13 +208,14 @@ class FileManagementWindow(QMainWindow):
         self.preview_btn.setEnabled(has_file)
         self.clear_btn.setEnabled(has_file)
         self.scan_start_card_btn.setEnabled(has_file and has_start_card_port)
+        self.count_cards_btn.setEnabled(has_file and has_start_card_port)
         self.download_btn.setEnabled(has_logs)
         self.clear_logs_btn.setEnabled(has_logs)
         
         if has_file:
-            self.file_status.setText(f"Loaded: {os.path.basename(self.app_state.selected_file_path)}")
+            self.file_status.setText(f"Active Sequence: {os.path.basename(self.app_state.selected_file_path)}")
         else:
-            self.file_status.setText("No file selected.")
+            self.file_status.setText("No sequence file loaded.")
 
         total = len(self.app_state.log_data)
         ok = len([log for log in self.app_state.log_data if log["status"] == "OK" or log["status"] == "OK (JUMPED)"])
@@ -222,10 +234,10 @@ class FileManagementWindow(QMainWindow):
         if file_path:
             if self.app_state.log_data:
                 msg_box = QMessageBox(self)
-                msg_box.setWindowTitle("Existing Logs Found")
-                msg_box.setText("Do you want to download the previous logs or delete them and continue?")
-                download_button = msg_box.addButton("Download and Clear", QMessageBox.ButtonRole.AcceptRole)
-                clear_button = msg_box.addButton("Delete and Continue", QMessageBox.ButtonRole.DestructiveRole)
+                msg_box.setWindowTitle("Unsaved Log Data Detected")
+                msg_box.setText("Unsaved log data from a previous session was detected. Would you like to export it before proceeding, or clear it and continue?")
+                download_button = msg_box.addButton("Export and Clear Logs", QMessageBox.ButtonRole.AcceptRole)
+                clear_button = msg_box.addButton("Clear Logs and Continue", QMessageBox.ButtonRole.DestructiveRole)
                 cancel_button = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
                 msg_box.exec()
 
@@ -263,6 +275,27 @@ class FileManagementWindow(QMainWindow):
             QMessageBox.information(self, "Success", message)
         else:
             QMessageBox.warning(self, "Scan Failed", message)
+
+    def handle_card_count_update(self, type, message):
+        if type == 'prompt':
+            if not self.card_count_prompt_dialog:
+                self.card_count_prompt_dialog = ScanPromptDialog(parent=self)
+                self.card_count_prompt_dialog.cancelled.connect(self.app_state.cancel_card_counting)
+            self.card_count_prompt_dialog.update_prompt(message)
+            self.card_count_prompt_dialog.show()
+        elif type == 'info':
+            if self.card_count_prompt_dialog:
+                self.card_count_prompt_dialog.update_prompt(message)
+        else:
+            # For results or errors, close the prompt dialog if it's open
+            if self.card_count_prompt_dialog:
+                self.card_count_prompt_dialog.close()
+                self.card_count_prompt_dialog = None
+            
+            if type == 'result':
+                QMessageBox.information(self, "Success", message)
+            elif type == 'error':
+                QMessageBox.warning(self, "Error", message)
 
     def download_logs(self):
         if not self.app_state.log_data:

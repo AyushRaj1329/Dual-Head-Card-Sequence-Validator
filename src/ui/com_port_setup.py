@@ -13,7 +13,7 @@ class ComPortSetupWindow(QMainWindow):
     def __init__(self, app_state):
         super().__init__()
         self.app_state = app_state
-        self.setWindowTitle("COM Port Configuration")
+        self.setWindowTitle("Serial Port Configuration")
         self.setMinimumSize(800, 700)
         
         self.update_theme(self.app_state.current_theme) # Set initial theme
@@ -40,6 +40,8 @@ class ComPortSetupWindow(QMainWindow):
         self.app_state.state_changed.connect(self.update_ui_from_state)
         self.app_state.com_status_changed.connect(self.add_log_entry)
         self.app_state.output_com_status_changed.connect(self.update_output_status)
+        self.app_state.start_card_scan_started.connect(self.on_start_card_scan_started)
+        self.app_state.start_card_scan_complete.connect(self.on_start_card_scan_complete)
         
         # --- MODIFIED: Connect each dropdown to its own specific update function ---
         self.input_port_combo.currentIndexChanged.connect(self._on_input_port_changed)
@@ -179,7 +181,7 @@ class ComPortSetupWindow(QMainWindow):
             self.input_status_text.setObjectName("statusOK")
         else:
             self.input_port_combo.setCurrentIndex(0) # Select the empty option
-            self.input_status_text.setText("Not Configured")
+            self.input_status_text.setText("Not Assigned")
             self.input_status_text.setObjectName("statusWarning")
         self.input_status_text.style().unpolish(self.input_status_text); self.input_status_text.style().polish(self.input_status_text)
         
@@ -190,7 +192,7 @@ class ComPortSetupWindow(QMainWindow):
             self.output_status_text.setObjectName("statusOK")
         else:
             self.output_port_combo.setCurrentIndex(0) # Select the empty option
-            self.output_status_text.setText("Disconnected")
+            self.output_status_text.setText("Not Connected")
             self.output_status_text.setObjectName("statusDisconnected")
         self.output_status_text.style().unpolish(self.output_status_text); self.output_status_text.style().polish(self.output_status_text)
 
@@ -201,7 +203,7 @@ class ComPortSetupWindow(QMainWindow):
             self.start_card_input_status_text.setObjectName("statusOK")
         else:
             self.start_card_input_port_combo.setCurrentIndex(0)
-            self.start_card_input_status_text.setText("Not Configured")
+            self.start_card_input_status_text.setText("Not Assigned")
             self.start_card_input_status_text.setObjectName("statusWarning")
         self.start_card_input_status_text.style().unpolish(self.start_card_input_status_text); self.start_card_input_status_text.style().polish(self.start_card_input_status_text)
             
@@ -224,9 +226,9 @@ class ComPortSetupWindow(QMainWindow):
     
     # ... (The rest of the file is unchanged) ...
     def create_header(self, parent_layout):
-        title = QLabel("COM Port Configuration")
+        title = QLabel("Serial Port Configuration")
         title.setObjectName("h1")
-        subtitle = QLabel("Configure serial ports for scanner input and validation result output")
+        subtitle = QLabel("Manage serial port connections for data input and output.")
         subtitle.setObjectName("subtitle")
         
         title_layout = QVBoxLayout()
@@ -255,19 +257,19 @@ class ComPortSetupWindow(QMainWindow):
         layout.setContentsMargins(25, 20, 25, 20)
         layout.setSpacing(15)
         
-        title = QLabel("Input Ports")
+        title = QLabel("Input Port Settings")
         title.setObjectName("h2")
         layout.addWidget(title)
 
         # Main Scanner Input
-        layout.addWidget(QLabel("Scanner Input Port:"))
+        layout.addWidget(QLabel("Main Scanner Port:"))
         self.input_port_combo = QComboBox()
         self.input_status_text = QLabel()
         layout.addWidget(self.input_port_combo)
         layout.addWidget(self.input_status_text)
 
         # Start Card Scanner Input
-        layout.addWidget(QLabel("Start Card Scan Port:"))
+        layout.addWidget(QLabel("Sequence Start Port:"))
         self.start_card_input_port_combo = QComboBox()
         self.start_card_input_status_text = QLabel()
         layout.addWidget(self.start_card_input_port_combo)
@@ -282,16 +284,16 @@ class ComPortSetupWindow(QMainWindow):
         layout = QVBoxLayout(section)
         layout.setContentsMargins(25, 20, 25, 20)
         layout.setSpacing(15)
-        title = QLabel("Validation Output Port")
+        title = QLabel("Output Port Settings")
         title.setObjectName("h2")
         self.output_port_combo = QComboBox()
         self.output_format_combo = QComboBox()
         self.output_status_text = QLabel()
         
         layout.addWidget(title)
-        layout.addWidget(QLabel("COM Port:"))
+        layout.addWidget(QLabel("Output COM Port:"))
         layout.addWidget(self.output_port_combo)
-        layout.addWidget(QLabel("Output Format:"))
+        layout.addWidget(QLabel("Data Output Format:"))
         layout.addWidget(self.output_format_combo)
         layout.addWidget(self.output_status_text)
         layout.addStretch()
@@ -304,7 +306,7 @@ class ComPortSetupWindow(QMainWindow):
         frame.setObjectName("panel")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(25, 20, 25, 20)
-        title = QLabel("Serial Port Settings")
+        title = QLabel("Advanced Serial Settings")
         title.setObjectName("h2")
         grid_layout = QHBoxLayout()
         grid_layout.setSpacing(20)
@@ -338,10 +340,10 @@ class ComPortSetupWindow(QMainWindow):
         apply_btn = QPushButton("Apply Configuration")
         apply_btn.setObjectName("primary")
         apply_btn.clicked.connect(self.apply_configuration)
-        disconnect_btn = QPushButton("Disconnect All")
+        disconnect_btn = QPushButton("Disconnect All Ports")
         disconnect_btn.setObjectName("secondary")
         disconnect_btn.clicked.connect(self.app_state.disconnect_all_ports)
-        refresh_btn = QPushButton("Refresh Port List")
+        refresh_btn = QPushButton("Refresh Ports")
         refresh_btn.setObjectName("secondary")
         refresh_btn.clicked.connect(self.refresh_ports)
         
@@ -356,7 +358,7 @@ class ComPortSetupWindow(QMainWindow):
         frame.setObjectName("panel")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(25, 20, 25, 20)
-        title = QLabel("System Status Log")
+        title = QLabel("Connection Log")
         title.setObjectName("h2")
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
@@ -385,6 +387,16 @@ class ComPortSetupWindow(QMainWindow):
     def update_output_status(self, message, color):
         self.add_log_entry(message, color)
         self.update_ui_from_state()
+
+    def on_start_card_scan_started(self, message):
+        self.start_card_input_status_text.setText(message)
+        self.start_card_input_status_text.setObjectName("statusScanning") # Or a new style for waiting
+        self.start_card_input_status_text.style().unpolish(self.start_card_input_status_text)
+        self.start_card_input_status_text.style().polish(self.start_card_input_status_text)
+
+    def on_start_card_scan_complete(self, message, success):
+        self.update_ui_from_state() # This will reset the status text
+        self.add_log_entry(message, "green" if success else "red")
 
     def update_theme(self, theme_name):
         if theme_name == "dark":
