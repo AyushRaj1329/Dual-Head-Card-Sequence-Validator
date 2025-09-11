@@ -41,6 +41,8 @@ class ComPortReader:
         self.parity, self.stopbits, self.timeout = parity, stopbits, timeout
         self.callback, self.error_callback = callback, error_callback
         self.running, self.thread, self.serial_instance = False, None, None
+        self.paused = threading.Event()
+        self.paused.set() # Initially not paused
 
     def start_reading(self):
         if self.running: return
@@ -51,8 +53,15 @@ class ComPortReader:
 
     def stop_reading(self):
         self.running = False
+        self.resume() # Ensure thread is not blocked before joining
         if self.thread and self.thread.is_alive(): self.thread.join()
         if self.serial_instance and self.serial_instance.is_open: self.serial_instance.close()
+
+    def pause(self):
+        self.paused.clear()
+
+    def resume(self):
+        self.paused.set()
 
     def read_loop(self):
         try:
@@ -63,6 +72,9 @@ class ComPortReader:
             if self.error_callback: self.error_callback(f"Successfully connected to {self.port}", "green")
 
             while self.running:
+                self.paused.wait() # This will block if pause() is called
+                if not self.running: break # Exit if stopped while paused
+
                 if self.serial_instance.in_waiting > 0:
                     raw_data = self.serial_instance.readline()
                     decoded_data = raw_data.decode(errors='ignore').strip()
@@ -242,7 +254,8 @@ class AppState(QObject):
                     future_match_index = lookup_dict[scanned_code]
                     if future_match_index > self.current_card_index:
                         num_skipped = future_match_index - self.current_card_index
-                        # The approval dialog will handle logging, so we don't log here
+                        # --- MODIFICATION: Pause scanning before showing dialog ---
+                        self.pause_scanning()
                         self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_match_index)
                     else:
                         # Scanned a card that was already scanned/skipped
@@ -310,11 +323,20 @@ class AppState(QObject):
         return log_entry
 
     def stop_scanning(self):
-        if self.com_port_reader: self.com_port_reader.stop_reading()
+        if self.com_port_reader:
+            self.com_port_reader.stop_reading()
         self.com_port_reader = None
         self.is_scanning = False
         self.state_changed.emit()
         self.save_cache()
+
+    def pause_scanning(self):
+        if self.com_port_reader:
+            self.com_port_reader.pause()
+
+    def resume_scanning(self):
+        if self.com_port_reader:
+            self.com_port_reader.resume()
 
     def load_file(self, file_path):
         try:
@@ -458,7 +480,7 @@ class AppState(QObject):
             for i in range(self.current_card_index, future_index):
                 skipped_num, skipped_left, skipped_right = self.expected_cards[i]
                 skipped_qr = skipped_left if self.scan_side == 'left' else skipped_right
-                log_entries_to_add.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", "N/A"))
+                log_entries_to_add.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
 
             # Log the card that was actually scanned
             status = "OK (JUMPED)"
@@ -467,10 +489,12 @@ class AppState(QObject):
             
             self.send_output_signal(status)
             self.current_card_index = future_index + 1
-        else: # This block now only runs if the user clicks "No" on the jump approval dialog
+            self.resume_scanning() # Resume scanning after successful jump
+        else: # This block now runs if the user clicks "No"
             status = "NOT OK"
             log_entries_to_add.append(self.add_log_entry(scanned_code, expected_qr, status, scanned_side))
             self.send_output_signal(status)
+            self.stop_scanning() # Stop scanning as requested by the user
 
         self.log_data.extend(log_entries_to_add)
         self.log_updated.emit(log_entries_to_add)
