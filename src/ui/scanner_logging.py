@@ -84,7 +84,6 @@ class ScannerLoggingWindow(QMainWindow):
             parent=self
         )
         approved = dialog.exec()
-        self.app_state.clear_input_buffer() # Clear the buffer
 
         if approved:
             self.stacked_layout.setCurrentIndex(1) # Show loading indicator

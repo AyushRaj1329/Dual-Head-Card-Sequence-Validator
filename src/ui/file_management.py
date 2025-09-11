@@ -5,25 +5,19 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushBu
                              QVBoxLayout, QFrame, QFileDialog, QLineEdit, QMessageBox, QDialog,
                              QTableWidget, QTableWidgetItem, QHeaderView, QListWidget, QDialogButtonBox)
 
-
-
-
 from PyQt6.QtCore import Qt
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
-from .widgets import ClockWidget, ScanPromptDialog
-import constants
+from .widgets import ClockWidget
 
 class PreviewWindow(QDialog):
     def __init__(self, expected_cards, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Preview Sequence Data")
 
-        # Safely inherit styles from parent if available
         if parent and hasattr(parent, 'styleSheet'):
             try:
                 self.setStyleSheet(parent.styleSheet())
-            except:
-                pass  # Ignore style errors
+            except: pass
 
         layout = QVBoxLayout(self)
         if not expected_cards:
@@ -44,19 +38,16 @@ class PreviewWindow(QDialog):
             
             layout.addWidget(table)
 
-        self.setMinimumSize(600, 400) # Set a minimum size for the dialog
-
+        self.setMinimumSize(600, 400)
 
 class FileManagementWindow(QMainWindow):
-    # ... (__init__ is the same) ...
     def __init__(self, app_state):
         super().__init__()
         self.app_state = app_state
         self.setWindowTitle("Sequence File Management")
-        self.card_count_prompt_dialog = None
         
-        self.update_theme(self.app_state.current_theme) # Set initial theme
-        self.app_state.theme_changed.connect(self.update_theme) # Connect to theme changes
+        self.update_theme(self.app_state.current_theme)
+        self.app_state.theme_changed.connect(self.update_theme)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -73,22 +64,19 @@ class FileManagementWindow(QMainWindow):
         self.app_state.state_changed.connect(self.update_ui)
         self.app_state.start_card_scan_complete.connect(self.handle_start_card_scan_complete)
         self.app_state.card_count_update.connect(self.handle_card_count_update)
+        self.app_state.ondemand_scan_status_update.connect(self.handle_ondemand_scan_status)
         self.update_ui()
-
 
     def create_header(self, parent_layout):
         title = QLabel("File Management")
         title.setObjectName("h1")
-
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0,0,0,10)
         header_layout.addWidget(title)
         header_layout.addStretch()
-        header_layout.addWidget(ClockWidget()) # Add the clock
-
+        header_layout.addWidget(ClockWidget())
         parent_layout.addLayout(header_layout)
         
-    # ... (rest of the file is the same) ...
     def create_file_operations(self, parent_layout):
         frame = QFrame()
         frame.setObjectName("panel")
@@ -133,22 +121,59 @@ class FileManagementWindow(QMainWindow):
         title.setObjectName("h2")
         layout.addWidget(title)
 
-        # Use a horizontal layout for the buttons
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(15)
-
+        scan_layout = QHBoxLayout()
+        scan_layout.setSpacing(15)
         self.scan_start_card_btn = QPushButton("Scan Start Card")
         self.scan_start_card_btn.setObjectName("primary")
         self.scan_start_card_btn.clicked.connect(self.app_state.scan_and_set_start_card)
-        button_layout.addWidget(self.scan_start_card_btn)
+        scan_layout.addWidget(self.scan_start_card_btn)
 
+        scan_layout.addWidget(QLabel("Current Start Card:"))
+        self.start_card_display = QLineEdit()
+        self.start_card_display.setReadOnly(True)
+        scan_layout.addWidget(self.start_card_display, 1)
+
+        count_frame = QFrame()
+        count_frame.setObjectName("accentPanel")
+        count_layout = QVBoxLayout(count_frame)
+        count_layout.setSpacing(10)
+
+        count_actions_layout = QHBoxLayout()
         self.count_cards_btn = QPushButton("Count Card Range")
         self.count_cards_btn.setObjectName("primary")
         self.count_cards_btn.clicked.connect(self.app_state.start_card_counting)
-        button_layout.addWidget(self.count_cards_btn)
+        self.cancel_scan_btn = QPushButton("Cancel Scan")
+        self.cancel_scan_btn.setObjectName("secondary")
+        self.cancel_scan_btn.clicked.connect(self.app_state.cancel_ondemand_scan)
+        self.cancel_scan_btn.setVisible(False)
+        count_actions_layout.addWidget(self.count_cards_btn)
+        count_actions_layout.addWidget(self.cancel_scan_btn)
+        count_actions_layout.addStretch()
 
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
+        self.card_count_status_label = QLabel("Click a button to start an on-demand scan.")
+        self.card_count_status_label.setObjectName("subtitle")
+
+        fields_layout = QHBoxLayout()
+        fields_layout.addWidget(QLabel("First Card:"))
+        self.first_card_field = QLineEdit()
+        self.first_card_field.setReadOnly(True)
+        fields_layout.addWidget(self.first_card_field)
+        fields_layout.addWidget(QLabel("Last Card:"))
+        self.last_card_field = QLineEdit()
+        self.last_card_field.setReadOnly(True)
+        fields_layout.addWidget(self.last_card_field)
+        fields_layout.addWidget(QLabel("Total:"))
+        self.total_count_field = QLineEdit()
+        self.total_count_field.setReadOnly(True)
+        self.total_count_field.setFixedWidth(80)
+        fields_layout.addWidget(self.total_count_field)
+
+        count_layout.addLayout(count_actions_layout)
+        count_layout.addWidget(self.card_count_status_label)
+        count_layout.addLayout(fields_layout)
+
+        layout.addLayout(scan_layout)
+        layout.addWidget(count_frame)
         parent_layout.addWidget(frame)
 
     def create_log_management(self, parent_layout):
@@ -205,10 +230,14 @@ class FileManagementWindow(QMainWindow):
         has_logs = bool(self.app_state.log_data)
         has_start_card_port = bool(self.app_state.start_card_scan_port)
 
+        is_waiting_for_scan = self.app_state.is_waiting_for_start_card or \
+                              self.app_state.is_waiting_for_count_card_1 or \
+                              self.app_state.is_waiting_for_count_card_2
+
         self.preview_btn.setEnabled(has_file)
         self.clear_btn.setEnabled(has_file)
-        self.scan_start_card_btn.setEnabled(has_file and has_start_card_port)
-        self.count_cards_btn.setEnabled(has_file and has_start_card_port)
+        self.scan_start_card_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan)
+        self.count_cards_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan)
         self.download_btn.setEnabled(has_logs)
         self.clear_logs_btn.setEnabled(has_logs)
         
@@ -217,10 +246,11 @@ class FileManagementWindow(QMainWindow):
         else:
             self.file_status.setText("No sequence file loaded.")
 
+        self.start_card_display.setText(self.app_state.start_card_code or "None")
+
         total = len(self.app_state.log_data)
         ok = len([log for log in self.app_state.log_data if log["status"] == "OK" or log["status"] == "OK (JUMPED)"])
         skipped = len([log for log in self.app_state.log_data if "SKIPPED" in log["status"]])
-        # Explicitly count "NOT OK" statuses
         error = len([log for log in self.app_state.log_data if "NOT OK" in log["status"]])
 
         self.total_scanned_label.setText(str(total))
@@ -244,13 +274,11 @@ class FileManagementWindow(QMainWindow):
                 clicked_button = msg_box.clickedButton()
 
                 if clicked_button == download_button:
-                    if not self.download_logs():
-                        return
+                    if not self.download_logs(): return
                     self.app_state.clear_logs()
                 elif clicked_button == clear_button:
                     self.app_state.clear_logs()
-                else: # Cancel
-                    return
+                else: return
 
             success, message = self.app_state.load_file(file_path)
             if success:
@@ -274,28 +302,33 @@ class FileManagementWindow(QMainWindow):
         if success:
             QMessageBox.information(self, "Success", message)
         else:
-            QMessageBox.warning(self, "Scan Failed", message)
+            QMessageBox.critical(self, "Scan Failed", message)
+        self.update_ui() # Re-enable buttons
 
     def handle_card_count_update(self, type, message):
-        if type == 'prompt':
-            if not self.card_count_prompt_dialog:
-                self.card_count_prompt_dialog = ScanPromptDialog(parent=self)
-                self.card_count_prompt_dialog.cancelled.connect(self.app_state.cancel_card_counting)
-            self.card_count_prompt_dialog.update_prompt(message)
-            self.card_count_prompt_dialog.show()
-        elif type == 'info':
-            if self.card_count_prompt_dialog:
-                self.card_count_prompt_dialog.update_prompt(message)
-        else:
-            # For results or errors, close the prompt dialog if it's open
-            if self.card_count_prompt_dialog:
-                self.card_count_prompt_dialog.close()
-                self.card_count_prompt_dialog = None
-            
-            if type == 'result':
-                QMessageBox.information(self, "Success", message)
-            elif type == 'error':
-                QMessageBox.warning(self, "Error", message)
+        if type == 'first_card':
+            self.first_card_field.setText(message)
+        elif type == 'last_card':
+            self.last_card_field.setText(message)
+        elif type == 'total':
+            self.total_count_field.setText(message)
+        elif type == 'error':
+            QMessageBox.warning(self, "Card Count Error", message)
+        elif type == 'clear':
+            self.first_card_field.clear()
+            self.last_card_field.clear()
+            self.total_count_field.clear()
+            self.card_count_status_label.setText("Click 'Count Card Range' to begin.")
+
+    def handle_ondemand_scan_status(self, status, message):
+        self.card_count_status_label.setText(message)
+        if status == 'active':
+            self.scan_start_card_btn.setEnabled(False)
+            self.count_cards_btn.setEnabled(False)
+            self.cancel_scan_btn.setVisible(True)
+        else: # idle, complete, or error
+            self.cancel_scan_btn.setVisible(False)
+            self.update_ui()
 
     def download_logs(self):
         if not self.app_state.log_data:
@@ -308,41 +341,30 @@ class FileManagementWindow(QMainWindow):
                     writer = csv.DictWriter(f, fieldnames=['index', 'timestamp', 'scanned_code', 'expected_code', 'status', 'scanned_side'])
                     writer.writeheader()
                     
-                    # Prepare data with the correct NUMCARD index
                     indexed_log_data = []
                     for log_entry in self.app_state.log_data:
                         indexed_entry = log_entry.copy()
-
-                        # Determine the NUMCARD to display as the index
                         expected_code = log_entry.get("expected_code", "N/A")
-                        display_numcard = "---"  # Default placeholder
-
-                        # Find the numcard by searching both left and right QR codes
+                        display_numcard = "---"
                         found_num = False
                         for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
                             if expected_code == left_qr or expected_code == right_qr:
                                 display_numcard = str(numcard)
                                 found_num = True
                                 break
-                        
                         if not found_num:
-                            if expected_code == "N/A":
-                                display_numcard = "N/A"
-                            elif expected_code == "End of Sequence":
-                                display_numcard = "End"
+                            if expected_code == "N/A": display_numcard = "N/A"
+                            elif expected_code == "End of Sequence": display_numcard = "End"
 
                         indexed_entry['index'] = display_numcard
-
-                        # Prepend single quote to force string format in Excel
-                        indexed_entry['timestamp'] = f"'" + str(indexed_entry.get('timestamp', ''))
-                        indexed_entry['scanned_code'] = f"'" + str(indexed_entry.get('scanned_code', ''))
-                        indexed_entry['expected_code'] = f"'" + str(indexed_entry.get('expected_code', ''))
-                        
+                        indexed_entry['timestamp'] = "'" + str(indexed_entry.get('timestamp', ''))
+                        indexed_entry['scanned_code'] = "'" + str(indexed_entry.get('scanned_code', ''))
+                        indexed_entry['expected_code'] = "'" + str(indexed_entry.get('expected_code', ''))
                         indexed_log_data.append(indexed_entry)
 
                     writer.writerows(indexed_log_data)
                 QMessageBox.information(self, "Success", f"Logs saved to {file_path}")
-                self.app_state.clear_logs() # Clear logs after successful download
+                self.app_state.clear_logs()
                 return True
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error saving file: {e}")
@@ -360,7 +382,6 @@ class FileManagementWindow(QMainWindow):
             self.setStyleSheet(DARK_THEME_STYLESHEET)
         else:
             self.setStyleSheet(LIGHT_THEME_STYLESHEET)
-        # Re-polish all widgets to apply new stylesheet
         for widget in self.findChildren(QWidget):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
