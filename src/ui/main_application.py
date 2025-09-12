@@ -358,6 +358,7 @@ class HomePage(QMainWindow):
         self.file_management_window.raise_()
 
     def closeEvent(self, event):
+        self.app_state.stop_scanning()
         self.app_state.save_cache()
         QApplication.quit()
 

@@ -64,6 +64,8 @@ class ComPortReader:
         self.paused.clear()
 
     def resume(self):
+        if self.serial_instance:
+            self.serial_instance.reset_input_buffer()
         self.paused.set()
 
     def read_loop(self):
