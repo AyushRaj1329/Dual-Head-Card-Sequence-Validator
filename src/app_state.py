@@ -7,6 +7,7 @@ import os
 import sys
 from datetime import datetime
 from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtWidgets import QMessageBox
 from appdirs import user_data_dir
 import serial.tools.list_ports
 import winreg
@@ -391,17 +392,20 @@ class AppState(QObject):
 
     def scan_and_set_start_card(self):
         if not self.ondemand_port_reader:
-            self.start_card_scan_complete.emit("Start card scan port not configured.", False)
+            QMessageBox.warning(None, "Configuration Error", "The 'On-Demand Scanner Port' must be configured in COM Port Setup before this action can be performed.")
+            return
+        if not self.expected_cards:
+            QMessageBox.warning(None, "File Error", "A sequence file must be loaded before setting the start card.")
             return
         self.is_waiting_for_start_card = True
         self.ondemand_scan_status_update.emit("active", "Scan the START card...")
 
     def start_card_counting(self):
         if not self.ondemand_port_reader:
-            self.card_count_update.emit('error', "Start card scan port not configured.")
+            QMessageBox.warning(None, "Configuration Error", "The 'On-Demand Scanner Port' must be configured in COM Port Setup before this action can be performed.")
             return
         if not self.expected_cards:
-            self.card_count_update.emit('error', "No card file loaded.")
+            QMessageBox.warning(None, "File Error", "A sequence file must be loaded before counting cards.")
             return
         
         self.is_waiting_for_count_card_1 = True

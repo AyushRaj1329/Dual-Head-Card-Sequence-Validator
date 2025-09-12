@@ -265,7 +265,7 @@ class ScannerLoggingWindow(QMainWindow):
                 elif log_entry["status"] == "NOT OK":
                     # Same for NOT OK
                     for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
-                        if expected_code == left_qr or expected_qr == right_qr:
+                        if expected_code == left_qr or expected_code == right_qr:
                             display_numcard = str(numcard)
                             break
                 elif log_entry["status"] == "SKIPPED":
