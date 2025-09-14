@@ -235,10 +235,12 @@ class FileManagementWindow(QMainWindow):
                               self.app_state.is_waiting_for_count_card_1 or \
                               self.app_state.is_waiting_for_count_card_2
 
+        is_scanning = self.app_state.is_scanning
+
         self.preview_btn.setEnabled(has_file)
         self.clear_btn.setEnabled(has_file)
-        self.scan_start_card_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan)
-        self.count_cards_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan)
+        self.scan_start_card_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan and not is_scanning)
+        self.count_cards_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan and not is_scanning)
         self.download_btn.setEnabled(has_logs)
         self.clear_logs_btn.setEnabled(has_logs)
         

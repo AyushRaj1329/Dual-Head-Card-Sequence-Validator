@@ -125,8 +125,6 @@ class ComPortSetupWindow(QMainWindow):
         if self.app_state.selected_com_port != main_port_to_set:
             self.app_state.stop_scanning()
             self.app_state.selected_com_port = main_port_to_set
-            if main_port_to_set:
-                self.app_state.start_scanning()
 
         # Connect/disconnect on-demand port
         ondemand_port_to_set = start_card_port if "No ports" not in start_card_port and start_card_port else None
