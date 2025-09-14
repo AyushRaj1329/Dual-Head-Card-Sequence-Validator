@@ -148,8 +148,7 @@ class AppState(QObject):
         if self.current_theme is None:
             self.current_theme = get_windows_theme()
         
-        if self.selected_com_port:
-            self.start_scanning()
+        # Connect to ports from cache, but do not start scanning automatically
         if self.start_card_scan_port:
             self.connect_start_card_port(self.start_card_scan_port)
         if self.selected_output_port:
