@@ -172,7 +172,7 @@ class ComPortSetupWindow(QMainWindow):
         self.update_status_labels()
 
     def update_status_labels(self):
-        if self.app_state.is_scanning:
+        if self.app_state.main_port_reader and self.app_state.main_port_reader.running:
             self.input_status_text.setText(f"Connected: {self.app_state.selected_com_port}")
             self.input_status_text.setObjectName("statusOK")
         else:

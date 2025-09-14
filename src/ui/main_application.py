@@ -298,33 +298,33 @@ class HomePage(QMainWindow):
         return container
 
     def update_status_indicators(self):
-        if self.app_state.is_scanning:
-            self.scanner_status_label.setText("Scanning")
+        if self.app_state.main_port_reader and self.app_state.main_port_reader.running:
+            self.scanner_status_label.setText("Connected")
             self.scanner_status_label.setObjectName("statusOK")
         else:
-            self.scanner_status_label.setText("Idle")
-            self.scanner_status_label.setObjectName("statusIdle")
+            self.scanner_status_label.setText("Not Connected")
+            self.scanner_status_label.setObjectName("statusWarning")
 
         if self.app_state.selected_file_path:
             file_name = os.path.basename(self.app_state.selected_file_path)
             self.file_status_label.setText(f"{file_name} ({len(self.app_state.expected_cards)} cards)")
             self.file_status_label.setObjectName("statusOK")
         else:
-            self.file_status_label.setText("No File")
+            self.file_status_label.setText("Not Loaded")
             self.file_status_label.setObjectName("statusWarning")
 
-        if self.app_state.selected_com_port:
+        if self.app_state.main_port_reader and self.app_state.main_port_reader.running:
             self.com_status_label.setText(self.app_state.selected_com_port)
             self.com_status_label.setObjectName("statusOK")
         else:
-            self.com_status_label.setText("Not Set")
+            self.com_status_label.setText("Not Connected")
             self.com_status_label.setObjectName("statusWarning")
 
-        if self.app_state.selected_output_port:
+        if self.app_state.output_com_writer and self.app_state.output_com_writer.is_connected:
             self.output_com_status_label.setText(self.app_state.selected_output_port)
             self.output_com_status_label.setObjectName("statusOK")
         else:
-            self.output_com_status_label.setText("Not Set")
+            self.output_com_status_label.setText("Not Connected")
             self.output_com_status_label.setObjectName("statusWarning")
 
         self.scanner_status_label.style().unpolish(self.scanner_status_label)
