@@ -76,7 +76,7 @@ class ComPortReader:
                 inter_byte_timeout=0.05
             )
             if self.error_callback:
-                self.error_callback(f"Successfully connected to {self.port}", "green")
+                self.error_callback(f"Connected to {self.port}", "green")
 
             while self.running:
                 self.paused.wait()
