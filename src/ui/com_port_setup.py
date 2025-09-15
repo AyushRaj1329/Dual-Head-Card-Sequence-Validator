@@ -38,7 +38,7 @@ class ComPortSetupWindow(QMainWindow):
         self.create_status_log(main_layout)
         
         self.app_state.state_changed.connect(self.update_ui_from_state)
-        self.app_state.com_status_changed.connect(self.add_log_entry)
+        self.app_state.com_status_changed.connect(self.update_input_status)
         self.app_state.output_com_status_changed.connect(self.update_output_status)
         self.app_state.ondemand_scan_status_update.connect(self.update_ondemand_status)
         
@@ -169,32 +169,24 @@ class ComPortSetupWindow(QMainWindow):
             combo.blockSignals(False)
         
         self._update_port_availability()
-        self.update_status_labels()
-
-    def update_status_labels(self):
-        if self.app_state.is_scanning:
-            self.input_status_text.setText(f"Connected: {self.app_state.selected_com_port}")
-            self.input_status_text.setObjectName("statusOK")
+        
+        # Update status labels based on current app state
+        if self.app_state.selected_com_port:
+            self.update_input_status(f"Connected to {self.app_state.selected_com_port}", "green")
         else:
-            self.input_status_text.setText("Not Connected")
-            self.input_status_text.setObjectName("statusDisconnected")
-        self.input_status_text.style().unpolish(self.input_status_text); self.input_status_text.style().polish(self.input_status_text)
+            self.update_input_status("Not Connected", "red")
 
-        if self.app_state.output_com_writer.is_connected:
-            self.output_status_text.setText(f"Connected: {self.app_state.selected_output_port}")
-            self.output_status_text.setObjectName("statusOK")
+        if self.app_state.start_card_scan_port:
+            self.update_ondemand_status(f"Connected to {self.app_state.start_card_scan_port}", "green")
         else:
-            self.output_status_text.setText("Not Connected")
-            self.output_status_text.setObjectName("statusDisconnected")
-        self.output_status_text.style().unpolish(self.output_status_text); self.output_status_text.style().polish(self.output_status_text)
+            self.update_ondemand_status("Not Connected", "red")
 
-        if self.app_state.ondemand_port_reader and self.app_state.ondemand_port_reader.running:
-            self.start_card_input_status_text.setText(f"Connected: {self.app_state.start_card_scan_port}")
-            self.start_card_input_status_text.setObjectName("statusOK")
+        if self.app_state.selected_output_port:
+            self.update_output_status(f"Connected to {self.app_state.selected_output_port}", "green")
         else:
-            self.start_card_input_status_text.setText("Not Connected")
-            self.start_card_input_status_text.setObjectName("statusDisconnected")
-        self.start_card_input_status_text.style().unpolish(self.start_card_input_status_text); self.start_card_input_status_text.style().polish(self.start_card_input_status_text)
+            self.update_output_status("Not Connected", "red")
+
+    
 
     def create_header(self, parent_layout):
         title = QLabel("Serial Port Configuration")
@@ -347,13 +339,48 @@ class ComPortSetupWindow(QMainWindow):
     
     def add_log_entry(self, message, color):
         self.log_text.append(f"[{self.app_state.get_timestamp()}] {message}")
-        self.update_status_labels()
     
     def update_output_status(self, message, color):
         self.add_log_entry(message, color)
+        self.output_status_text.setText(message)
+        if color == "green":
+            self.output_status_text.setObjectName("statusOK")
+        elif color == "red":
+            self.output_status_text.setObjectName("statusError")
+        elif color == "orange":
+            self.output_status_text.setObjectName("statusWarning")
+        else:
+            self.output_status_text.setObjectName("statusIdle")
+        self.output_status_text.style().unpolish(self.output_status_text)
+        self.output_status_text.style().polish(self.output_status_text)
 
     def update_ondemand_status(self, message, color):
         self.add_log_entry(message, color)
+        self.start_card_input_status_text.setText(message)
+        if color == "green":
+            self.start_card_input_status_text.setObjectName("statusOK")
+        elif color == "red":
+            self.start_card_input_status_text.setObjectName("statusError")
+        elif color == "orange":
+            self.start_card_input_status_text.setObjectName("statusWarning")
+        else:
+            self.start_card_input_status_text.setObjectName("statusIdle")
+        self.start_card_input_status_text.style().unpolish(self.start_card_input_status_text)
+        self.start_card_input_status_text.style().polish(self.start_card_input_status_text)
+
+    def update_input_status(self, message, color):
+        self.add_log_entry(message, color)
+        self.input_status_text.setText(message)
+        if color == "green":
+            self.input_status_text.setObjectName("statusOK")
+        elif color == "red":
+            self.input_status_text.setObjectName("statusError")
+        elif color == "orange":
+            self.input_status_text.setObjectName("statusWarning")
+        else:
+            self.input_status_text.setObjectName("statusIdle")
+        self.input_status_text.style().unpolish(self.input_status_text)
+        self.input_status_text.style().polish(self.input_status_text)
 
     def update_theme(self, theme_name):
         stylesheet = DARK_THEME_STYLESHEET if theme_name == "dark" else LIGHT_THEME_STYLESHEET

@@ -94,7 +94,7 @@ class ComPortReader:
         finally:
             self.running = False
             if self.error_callback and self.port:
-                self.error_callback(f"Disconnected from {self.port}", "orange")
+                self.error_callback("Not Connected", "red")
 
 class AppState(QObject):
     log_updated = pyqtSignal(list)
@@ -220,11 +220,13 @@ class AppState(QObject):
         )
         self.is_scanning = True
         self.main_port_reader.start_reading()
+        self.com_status_changed.emit(self.selected_com_port, "green")
         self.state_changed.emit()
 
     def stop_scanning(self):
         if self.main_port_reader:
             self.main_port_reader.stop_reading()
+            self.com_status_changed.emit("Not Set", "red")
         self.main_port_reader = None
         self.is_scanning = False
         self.state_changed.emit()
@@ -272,7 +274,7 @@ class AppState(QObject):
         if not port:
             self.start_card_scan_port = None
             self.ondemand_port_reader = None
-            self.ondemand_scan_status_update.emit("On-demand port disconnected.", "orange")
+            self.ondemand_scan_status_update.emit("Not Connected", "red")
             return
 
         self.ondemand_port_reader = ComPortReader(
@@ -283,6 +285,7 @@ class AppState(QObject):
         )
         self.start_card_scan_port = port
         self.ondemand_port_reader.start_reading()
+        self.ondemand_scan_status_update.emit(self.start_card_scan_port, "green")
         self.state_changed.emit()
 
     def connect_output_port(self, port):
@@ -294,7 +297,7 @@ class AppState(QObject):
         )
         if success:
             self.selected_output_port = port
-            self.output_com_status_changed.emit(message, "green")
+            self.output_com_status_changed.emit(port, "green")
         else:
             self.selected_output_port = None
             self.output_com_status_changed.emit(message, "red")
@@ -305,8 +308,10 @@ class AppState(QObject):
         if self.ondemand_port_reader:
             self.ondemand_port_reader.stop_reading()
             self.ondemand_port_reader = None
+            self.ondemand_scan_status_update.emit("Not Connected", "red")
         if self.output_com_writer.is_connected:
             self.output_com_writer.disconnect()
+            self.output_com_status_changed.emit("Not Connected", "red")
         
         self.selected_com_port = None
         self.start_card_scan_port = None
@@ -413,13 +418,23 @@ class AppState(QObject):
         self.card_count_update.emit('clear', '')
         self.ondemand_scan_status_update.emit("active", "Scan the FIRST card...")
 
-    def cancel_ondemand_scan(self):
+    def _reset_ondemand_scan_state(self):
         self.is_waiting_for_start_card = False
         self.is_waiting_for_count_card_1 = False
         self.is_waiting_for_count_card_2 = False
         self.first_card_index = -1
         self.card_count_update.emit('clear', '')
-        self.ondemand_scan_status_update.emit("idle", "Scan cancelled. Click a button to start.")
+        self.ondemand_scan_status_update.emit("", "Scan cancelled. Click a button to start.")
+
+    def cancel_start_card_scan(self):
+        self.is_waiting_for_start_card = False
+        self._reset_ondemand_scan_state()
+
+    def cancel_count_card_range_scan(self):
+        self.is_waiting_for_count_card_1 = False
+        self.is_waiting_for_count_card_2 = False
+        self.first_card_index = -1
+        self._reset_ondemand_scan_state()
 
     def handle_ondemand_scan(self, scanned_code):
         if self.is_waiting_for_start_card:
@@ -449,7 +464,7 @@ class AppState(QObject):
             self.start_card_scan_complete.emit(f"Start card set to {card_num}. Scan side: Right.", True)
         else:
             self.start_card_scan_complete.emit(f"Scanned card {scanned_code} not found in file.", False)
-        self.ondemand_scan_status_update.emit("idle", "Scan complete.")
+        self.ondemand_scan_status_update.emit("", "Scan complete.")
         self.state_changed.emit()
 
     def process_count_card_1(self, scanned_code):
@@ -462,7 +477,7 @@ class AppState(QObject):
 
         if scanned_index == -1:
             self.card_count_update.emit('error', f"First card '{scanned_code}' not found.")
-            self.ondemand_scan_status_update.emit("idle", "Error. Try again.")
+            self.ondemand_scan_status_update.emit("", "Error. Try again.")
         else:
             self.first_card_index = scanned_index
             self.card_count_update.emit('first_card', scanned_code)
@@ -479,15 +494,15 @@ class AppState(QObject):
 
         if scanned_index == -1:
             self.card_count_update.emit('error', f"Last card '{scanned_code}' not found.")
-            self.ondemand_scan_status_update.emit("idle", "Error. Try again.")
+            self.ondemand_scan_status_update.emit("", "Error. Try again.")
         elif scanned_index < self.first_card_index:
             self.card_count_update.emit('error', "Last card cannot come before first card.")
-            self.ondemand_scan_status_update.emit("idle", "Error. Try again.")
+            self.ondemand_scan_status_update.emit("", "Error. Try again.")
         else:
             self.card_count_update.emit('last_card', scanned_code)
             count = scanned_index - self.first_card_index + 1
             self.card_count_update.emit('total', str(count))
-            self.ondemand_scan_status_update.emit("idle", f"Successfully counted {count} cards.")
+            self.ondemand_scan_status_update.emit("", f"Successfully counted {count} cards.")
         
         self.first_card_index = -1
 

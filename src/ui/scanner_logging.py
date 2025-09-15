@@ -61,8 +61,11 @@ class ScannerLoggingWindow(QMainWindow):
         # --- MODIFIED: Connection for the "not found" alert is removed ---
         self.app_state.mismatch_found_in_sequence.connect(self.show_approval_dialog)
 
+        # Manually populate logs if they exist from cache
+        if self.app_state.log_data:
+            self.on_log_updated(self.app_state.log_data)
+
         self.update_displays()
-        self.on_log_cleared() # Initial setup
 
     def on_log_updated(self, new_entries):
         self.total_log_entries.extend(new_entries)

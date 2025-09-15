@@ -1,9 +1,10 @@
 # src/ui/file_management.py
 import sys, os, csv
 from datetime import datetime
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout, 
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout,
                              QVBoxLayout, QFrame, QFileDialog, QLineEdit, QMessageBox, QDialog,
-                             QTableWidget, QTableWidgetItem, QHeaderView, QListWidget, QDialogButtonBox)
+                             QTableWidget, QTableWidgetItem, QHeaderView, QListWidget, QDialogButtonBox,
+                             QSizePolicy, QGridLayout, QScrollArea)
 
 from PyQt6.QtCore import Qt
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
@@ -46,12 +47,12 @@ class FileManagementWindow(QMainWindow):
         super().__init__()
         self.app_state = app_state
         self.setWindowTitle("Sequence File Management")
+        self.setMinimumSize(800, 700)
         
         self.update_theme(self.app_state.current_theme)
         self.app_state.theme_changed.connect(self.update_theme)
 
         central_widget = QWidget()
-        self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(40, 30, 40, 30)
         main_layout.setSpacing(25)
@@ -61,6 +62,11 @@ class FileManagementWindow(QMainWindow):
         self.create_card_selection(main_layout)
         self.create_log_management(main_layout)
         main_layout.addStretch()
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(central_widget)
+        self.setCentralWidget(scroll_area)
 
         self.app_state.state_changed.connect(self.update_ui)
         self.app_state.start_card_scan_complete.connect(self.handle_start_card_scan_complete)
@@ -127,12 +133,19 @@ class FileManagementWindow(QMainWindow):
         self.scan_start_card_btn = QPushButton("Scan Start Card")
         self.scan_start_card_btn.setObjectName("primary")
         self.scan_start_card_btn.clicked.connect(self.app_state.scan_and_set_start_card)
-        scan_layout.addWidget(self.scan_start_card_btn)
+        scan_layout.addWidget(self.scan_start_card_btn, 1) # Added stretch factor
+        
+        self.cancel_start_card_btn = QPushButton("Cancel Scan")
+        self.cancel_start_card_btn.setObjectName("secondary")
+        self.cancel_start_card_btn.clicked.connect(self.app_state.cancel_start_card_scan)
+        self.cancel_start_card_btn.setVisible(False)
+        scan_layout.addWidget(self.cancel_start_card_btn, 1) # Added to scan_layout
 
         scan_layout.addWidget(QLabel("Current Start Card:"))
         self.start_card_display = QLineEdit()
         self.start_card_display.setReadOnly(True)
-        scan_layout.addWidget(self.start_card_display, 1)
+        scan_layout.addWidget(self.start_card_display, 2) # Increased stretch factor
+        scan_layout.addStretch(1) # Added stretch to scan_layout
 
         count_frame = QFrame()
         count_frame.setObjectName("accentPanel")
@@ -143,38 +156,50 @@ class FileManagementWindow(QMainWindow):
         self.count_cards_btn = QPushButton("Count Card Range")
         self.count_cards_btn.setObjectName("primary")
         self.count_cards_btn.clicked.connect(self.app_state.start_card_counting)
-        self.cancel_scan_btn = QPushButton("Cancel Scan")
-        self.cancel_scan_btn.setObjectName("secondary")
-        self.cancel_scan_btn.clicked.connect(self.app_state.cancel_ondemand_scan)
-        self.cancel_scan_btn.setVisible(False)
+        self.count_cards_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.count_cards_btn.setMinimumWidth(120)
+        
+        self.cancel_count_cards_btn = QPushButton("Cancel Scan")
+        self.cancel_count_cards_btn.setObjectName("secondary")
+        self.cancel_count_cards_btn.clicked.connect(self.app_state.cancel_count_card_range_scan)
+        self.cancel_count_cards_btn.setVisible(False)
+        self.cancel_count_cards_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.cancel_count_cards_btn.setMinimumWidth(120)
+
         count_actions_layout.addWidget(self.count_cards_btn)
-        count_actions_layout.addWidget(self.cancel_scan_btn)
-        count_actions_layout.addStretch()
+        count_actions_layout.addWidget(self.cancel_count_cards_btn)
+        count_actions_layout.addStretch(1)
 
         self.card_count_status_label = QLabel("Click a button to start an on-demand scan.")
         self.card_count_status_label.setObjectName("subtitle")
 
-        fields_layout = QHBoxLayout()
-        fields_layout.addWidget(QLabel("First Card:"))
+        fields_layout = QGridLayout()
+        fields_layout.setSpacing(10)
+        
+        fields_layout.addWidget(QLabel("First Card:"), 0, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         self.first_card_field = QLineEdit()
         self.first_card_field.setReadOnly(True)
-        fields_layout.addWidget(self.first_card_field)
-        fields_layout.addWidget(QLabel("Last Card:"))
+        fields_layout.addWidget(self.first_card_field, 0, 1)
+        
+        fields_layout.addWidget(QLabel("Last Card:"), 1, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         self.last_card_field = QLineEdit()
         self.last_card_field.setReadOnly(True)
-        fields_layout.addWidget(self.last_card_field)
-        fields_layout.addWidget(QLabel("Total:"))
+        fields_layout.addWidget(self.last_card_field, 1, 1)
+        
+        fields_layout.addWidget(QLabel("Total:"), 2, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         self.total_count_field = QLineEdit()
         self.total_count_field.setReadOnly(True)
-        self.total_count_field.setFixedWidth(80)
-        fields_layout.addWidget(self.total_count_field)
+        self.total_count_field.setFixedWidth(80) # Keep fixed width for total for now
+        fields_layout.addWidget(self.total_count_field, 2, 1)
 
         count_layout.addLayout(count_actions_layout)
         count_layout.addWidget(self.card_count_status_label)
         count_layout.addLayout(fields_layout)
+        count_layout.addStretch(1)
 
         layout.addLayout(scan_layout)
         layout.addWidget(count_frame)
+        layout.addStretch(1)
         parent_layout.addWidget(frame)
 
     def create_log_management(self, parent_layout):
@@ -240,7 +265,7 @@ class FileManagementWindow(QMainWindow):
         self.preview_btn.setEnabled(has_file)
         self.clear_btn.setEnabled(has_file)
         self.scan_start_card_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan and not is_scanning)
-        self.count_cards_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan and not is_scanning)
+        self.count_cards_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan)
         self.download_btn.setEnabled(has_logs)
         self.clear_logs_btn.setEnabled(has_logs)
         
@@ -328,9 +353,19 @@ class FileManagementWindow(QMainWindow):
         if status == 'active':
             self.scan_start_card_btn.setEnabled(False)
             self.count_cards_btn.setEnabled(False)
-            self.cancel_scan_btn.setVisible(True)
+            
+            if self.app_state.is_waiting_for_start_card:
+                self.cancel_start_card_btn.setVisible(True)
+                self.cancel_count_cards_btn.setVisible(False)
+            elif self.app_state.is_waiting_for_count_card_1 or self.app_state.is_waiting_for_count_card_2:
+                self.cancel_start_card_btn.setVisible(False)
+                self.cancel_count_cards_btn.setVisible(True)
+            else:
+                self.cancel_start_card_btn.setVisible(False)
+                self.cancel_count_cards_btn.setVisible(False)
         else: # idle, complete, or error
-            self.cancel_scan_btn.setVisible(False)
+            self.cancel_start_card_btn.setVisible(False)
+            self.cancel_count_cards_btn.setVisible(False)
             self.update_ui()
 
     def download_logs(self):

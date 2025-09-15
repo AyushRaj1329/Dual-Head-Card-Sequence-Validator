@@ -77,6 +77,7 @@ class HomePage(QMainWindow):
             widget.setAutoFillBackground(True)
 
         self.app_state.state_changed.connect(self.update_status_indicators)
+        
         self.update_status_indicators()
 
         # Apply initial theme after app_state is ready (and cache is loaded)
@@ -277,10 +278,12 @@ class HomePage(QMainWindow):
         self.file_status_label = QLabel()
         self.com_status_label = QLabel()
         self.output_com_status_label = QLabel()
+        self.scan_card_com_status_label = QLabel()
 
         indicators_layout.addWidget(self.create_status_indicator("Scanner:", self.scanner_status_label), 1)
         indicators_layout.addWidget(self.create_status_indicator("Input Port:", self.com_status_label), 1)
         indicators_layout.addWidget(self.create_status_indicator("Output Port:", self.output_com_status_label), 1)
+        indicators_layout.addWidget(self.create_status_indicator("Scan Card Port:", self.scan_card_com_status_label), 1)
         indicators_layout.addWidget(self.create_status_indicator("File Loaded:", self.file_status_label), 1)
 
         status_layout.addWidget(status_title)
@@ -336,9 +339,32 @@ class HomePage(QMainWindow):
         self.output_com_status_label.style().unpolish(self.output_com_status_label)
         self.output_com_status_label.style().polish(self.output_com_status_label)
 
+        # Update scan card com status
+        if self.app_state.start_card_scan_port:
+            self.update_scan_card_com_status(self.app_state.start_card_scan_port, "green")
+        else:
+            self.update_scan_card_com_status("Not Set", "orange")
+
+        self.scan_card_com_status_label.style().unpolish(self.scan_card_com_status_label)
+        self.scan_card_com_status_label.style().polish(self.scan_card_com_status_label)
+
+    def update_scan_card_com_status(self, message, color):
+        self.scan_card_com_status_label.setText(message)
+        if color == "green":
+            self.scan_card_com_status_label.setObjectName("statusOK")
+        elif color == "red":
+            self.scan_card_com_status_label.setObjectName("statusError")
+        elif color == "orange":
+            self.scan_card_com_status_label.setObjectName("statusWarning")
+        
+        self.scan_card_com_status_label.style().unpolish(self.scan_card_com_status_label)
+        self.scan_card_com_status_label.style().polish(self.scan_card_com_status_label)
+
     def open_scanner(self):
         if self.scanner_logging_window is None:
             self.scanner_logging_window = ScannerLoggingWindow(self.app_state)
+        if self.scanner_logging_window.isMinimized():
+            self.scanner_logging_window.showNormal()
         self.scanner_logging_window.show()
         self.scanner_logging_window.activateWindow()
         self.scanner_logging_window.raise_()
@@ -346,6 +372,8 @@ class HomePage(QMainWindow):
     def open_com_port_setup(self):
         if self.com_port_window is None:
             self.com_port_window = ComPortSetupWindow(self.app_state)
+        if self.com_port_window.isMinimized():
+            self.com_port_window.showNormal()
         self.com_port_window.show()
         self.com_port_window.activateWindow()
         self.com_port_window.raise_()
@@ -353,6 +381,8 @@ class HomePage(QMainWindow):
     def open_file_management(self):
         if self.file_management_window is None:
             self.file_management_window = FileManagementWindow(self.app_state)
+        if self.file_management_window.isMinimized():
+            self.file_management_window.showNormal()
         self.file_management_window.show()
         self.file_management_window.activateWindow()
         self.file_management_window.raise_()
