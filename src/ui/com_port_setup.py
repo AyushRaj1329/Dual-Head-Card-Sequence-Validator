@@ -361,10 +361,6 @@ class ComPortSetupWindow(QMainWindow):
             self.start_card_input_status_text.setObjectName("statusOK")
         elif color == "red":
             self.start_card_input_status_text.setObjectName("statusError")
-        elif color == "orange":
-            self.start_card_input_status_text.setObjectName("statusWarning")
-        else:
-            self.start_card_input_status_text.setObjectName("statusIdle")
         self.start_card_input_status_text.style().unpolish(self.start_card_input_status_text)
         self.start_card_input_status_text.style().polish(self.start_card_input_status_text)
 
