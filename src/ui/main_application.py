@@ -1,7 +1,7 @@
 # src/ui/main_application.py
 import sys
 import os
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QGraphicsOpacityEffect, QSizePolicy, QScrollArea
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QGraphicsOpacityEffect, QSizePolicy, QScrollArea, QMessageBox
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QRect, QParallelAnimationGroup, QTimer
 from PyQt6.QtGui import QPixmap, QScreen
 
@@ -87,6 +87,18 @@ class HomePage(QMainWindow):
         # Apply initial theme after app_state is ready (and cache is loaded)
         self.apply_theme(self.app_state.current_theme)
 
+        # Perform license validation
+        self.check_license()
+
+    def check_license(self):
+        from src.services.licensing import validate_license
+        is_valid, message, machine_id = validate_license()
+
+        if not is_valid:
+            error_message = f"{message}\n\nPlease contact support to obtain a valid license."
+            QMessageBox.critical(self, "License Error", error_message)
+            sys.exit(1)
+
     def showEvent(self, event):
         super().showEvent(event)
 
@@ -119,6 +131,16 @@ class HomePage(QMainWindow):
             QTimer.singleShot(1500, self.start_animation)
             self.animation_played = True
 
+    
+
+    def update_animation_end_rect(self):
+        # Final state of the logo, calculated dynamically
+        end_rect = self.header_logo_placeholder.geometry()
+        # Map the position from the header_container's coordinate system to the main window's
+        global_pos = self.header_logo_placeholder.parentWidget().mapTo(self, self.header_logo_placeholder.pos())
+        end_rect.moveTo(global_pos)
+        self.animation_end_rect = end_rect
+
     def update_animation_end_rect(self):
         # Final state of the logo, calculated dynamically
         end_rect = self.header_logo_placeholder.geometry()
@@ -129,6 +151,10 @@ class HomePage(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        # If the animation is in progress, update its end value
+        if self.animation_played and hasattr(self, 'logo_animation') and self.logo_animation.state() == QPropertyAnimation.State.Running:
+            self.update_animation_end_rect()
+            self.logo_animation.setEndValue(self.animation_end_rect)
         # If the animation is in progress, update its end value
         if self.animation_played and hasattr(self, 'logo_animation') and self.logo_animation.state() == QPropertyAnimation.State.Running:
             self.update_animation_end_rect()

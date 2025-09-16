@@ -5,6 +5,10 @@ dist/
 # PyInstaller spec file
 *.spec
 
+# License and key files (CONFIDENTIAL)
+*.pem
+license.dat
+
 # Virtual environment
 .venv/
 __pycache__/

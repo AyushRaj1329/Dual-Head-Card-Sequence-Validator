@@ -1,7 +1,10 @@
 # Card Sequence Validator - Core Dependencies
 PyQt6>=6.5.0        # GUI framework for the desktop application
-pyserial>=3.5       # Serial communication for COM port handling
-
+customtkinter
+pyserial
+cryptography
+pyarmor       # Serial communication for COM port handling
+cryptography
 # Note: The following dependencies were removed as they are not used in the application:
 # - numpy, pandas: Not imported anywhere in the codebase
 # - pillow: Only used for logo loading, but PyQt6 handles image loading internally
