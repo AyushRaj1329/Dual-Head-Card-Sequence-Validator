@@ -144,19 +144,22 @@ class ComPortSetupWindow(QMainWindow):
         for combo in [self.input_port_combo, self.output_port_combo, self.start_card_input_port_combo]:
             combo.blockSignals(True)
 
-        if self.app_state.selected_com_port:
+        if self.app_state.selected_com_port and self.app_state.selected_com_port in self.all_ports:
             self.input_port_combo.setCurrentText(self.app_state.selected_com_port)
         else:
+            self.app_state.selected_com_port = None
             self.input_port_combo.setCurrentIndex(0)
 
-        if self.app_state.selected_output_port:
+        if self.app_state.selected_output_port and self.app_state.selected_output_port in self.all_ports:
             self.output_port_combo.setCurrentText(self.app_state.selected_output_port)
         else:
+            self.app_state.selected_output_port = None
             self.output_port_combo.setCurrentIndex(0)
 
-        if self.app_state.start_card_scan_port:
+        if self.app_state.start_card_scan_port and self.app_state.start_card_scan_port in self.all_ports:
             self.start_card_input_port_combo.setCurrentText(self.app_state.start_card_scan_port)
         else:
+            self.app_state.start_card_scan_port = None
             self.start_card_input_port_combo.setCurrentIndex(0)
 
         self.baud_rate_combo.setCurrentText(str(self.app_state.baud_rate))
@@ -168,6 +171,7 @@ class ComPortSetupWindow(QMainWindow):
         for combo in [self.input_port_combo, self.output_port_combo, self.start_card_input_port_combo]:
             combo.blockSignals(False)
         
+        self.app_state.save_cache()
         self._update_port_availability()
         
         # Update status labels based on current app state
@@ -356,13 +360,15 @@ class ComPortSetupWindow(QMainWindow):
 
     def update_ondemand_status(self, message, color):
         self.add_log_entry(message, color)
-        self.start_card_input_status_text.setText(message)
-        if color == "green":
-            self.start_card_input_status_text.setObjectName("statusOK")
-        elif color == "red":
-            self.start_card_input_status_text.setObjectName("statusError")
-        self.start_card_input_status_text.style().unpolish(self.start_card_input_status_text)
-        self.start_card_input_status_text.style().polish(self.start_card_input_status_text)
+        # Only update the status text if it's a connection status message
+        if message.startswith("Connected to") or message == "Not Connected":
+            self.start_card_input_status_text.setText(message)
+            if color == "green":
+                self.start_card_input_status_text.setObjectName("statusOK")
+            elif color == "red":
+                self.start_card_input_status_text.setObjectName("statusError")
+            self.start_card_input_status_text.style().unpolish(self.start_card_input_status_text)
+            self.start_card_input_status_text.style().polish(self.start_card_input_status_text)
 
     def update_input_status(self, message, color):
         self.add_log_entry(message, color)
