@@ -3,7 +3,7 @@ import sys
 import serial.tools.list_ports
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout,
-    QVBoxLayout, QComboBox, QTextEdit, QScrollArea, QFrame, QMessageBox
+    QVBoxLayout, QComboBox, QTextEdit, QScrollArea, QFrame, QMessageBox, QGridLayout
 )
 from PyQt6.QtCore import Qt
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
@@ -14,7 +14,6 @@ class ComPortSetupWindow(QMainWindow):
         super().__init__()
         self.app_state = app_state
         self.setWindowTitle("Serial Port Configuration")
-        self.setMinimumSize(800, 700)
         
         self.update_theme(self.app_state.current_theme)
         self.app_state.theme_changed.connect(self.update_theme)
@@ -211,10 +210,10 @@ class ComPortSetupWindow(QMainWindow):
         parent_layout.addLayout(header_layout)
 
     def create_com_port_sections(self, parent_layout):
-        layout = QHBoxLayout()
+        layout = QGridLayout()
         layout.setSpacing(25)
-        layout.addWidget(self.create_input_com_section())
-        layout.addWidget(self.create_output_com_section())
+        layout.addWidget(self.create_input_com_section(), 0, 0)
+        layout.addWidget(self.create_output_com_section(), 0, 1)
         parent_layout.addLayout(layout)
 
     def create_input_com_section(self):
@@ -271,7 +270,7 @@ class ComPortSetupWindow(QMainWindow):
         layout.setContentsMargins(25, 20, 25, 20)
         title = QLabel("Advanced Serial Settings")
         title.setObjectName("h2")
-        grid_layout = QHBoxLayout()
+        grid_layout = QGridLayout()
         grid_layout.setSpacing(20)
         
         self.baud_rate_combo = QComboBox()
@@ -285,13 +284,18 @@ class ComPortSetupWindow(QMainWindow):
             ("Parity", self.parity_combo), ("Stop Bits", self.stop_bits_combo), ("Timeout (s)", self.timeout_combo)
         ]
 
+        row, col = 0, 0
         for label_text, combo_box in widgets:
             col_layout = QVBoxLayout()
             label = QLabel(label_text)
             label.setStyleSheet("font-weight: bold;")
             col_layout.addWidget(label)
             col_layout.addWidget(combo_box)
-            grid_layout.addLayout(col_layout)
+            grid_layout.addLayout(col_layout, row, col)
+            col += 1
+            if col > 2:
+                col = 0
+                row += 1
         
         layout.addWidget(title)
         layout.addLayout(grid_layout)

@@ -1,7 +1,7 @@
 # src/ui/main_application.py
 import sys
 import os
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QGraphicsOpacityEffect
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QGraphicsOpacityEffect, QSizePolicy, QScrollArea
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QRect, QParallelAnimationGroup, QTimer
 from PyQt6.QtGui import QPixmap, QScreen
 
@@ -10,7 +10,7 @@ from .com_port_setup import ComPortSetupWindow
 from .file_management import FileManagementWindow
 from .scanner_logging import ScannerLoggingWindow
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
-from .widgets import ClockWidget
+from .widgets import ClockWidget, ScalableLabel
 import constants
 
 def resource_path(relative_path):
@@ -37,21 +37,25 @@ class HomePage(QMainWindow):
         self.initializing_label = None
         self.animation_played = False
 
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        self.setCentralWidget(scroll_area)
+
         central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        scroll_area.setWidget(central_widget)
+
         self.main_layout = QVBoxLayout(central_widget)
         self.main_layout.setContentsMargins(40, 30, 40, 30)
         self.main_layout.setSpacing(30)
 
         # Create the logo for animation
-        self.logo_label = QLabel(self)
+        self.logo_label = ScalableLabel(self)
         self.aspect_ratio = 16/9
         logo_path = resource_path(constants.LOGO_PATH)
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path)
             self.aspect_ratio = pixmap.width() / pixmap.height()
             self.logo_label.setPixmap(pixmap)
-            self.logo_label.setScaledContents(True)
 
         # Create all widgets but keep them hidden initially
         self.header_container = QWidget()
@@ -87,15 +91,14 @@ class HomePage(QMainWindow):
         super().showEvent(event)
 
         if not self.animation_played:
-            # Initial state of the logo for the delay period
-            start_height = 300
-            start_width = int(start_height * self.aspect_ratio)
-
-            # Get screen geometry to center the logo
             screen = QApplication.primaryScreen()
             screen_geometry = screen.availableGeometry()
 
-            # Calculate center position based on screen geometry
+            # Make initial logo size responsive to screen height
+            start_height = int(screen_geometry.height() * 0.3)
+            start_width = int(start_height * self.aspect_ratio)
+
+            # Center the logo on the screen
             x = (screen_geometry.width() - start_width) // 2
             y = (screen_geometry.height() - start_height) // 2
 
@@ -112,22 +115,35 @@ class HomePage(QMainWindow):
             self.initializing_label.setGeometry(label_x, label_y, self.initializing_label.width(), self.initializing_label.height())
             self.initializing_label.raise_()
 
-            # Delay the start of the animation to keep the logo on screen for some time
+            # Delay the start of the animation
             QTimer.singleShot(1500, self.start_animation)
             self.animation_played = True
 
-    def start_animation(self):
-        start_rect = self.logo_label.geometry()
-
-        # Final state of the logo
+    def update_animation_end_rect(self):
+        # Final state of the logo, calculated dynamically
         end_rect = self.header_logo_placeholder.geometry()
-        end_rect.moveTo(self.header_container.mapTo(self, self.header_logo_placeholder.pos()))
+        # Map the position from the header_container's coordinate system to the main window's
+        global_pos = self.header_logo_placeholder.parentWidget().mapTo(self, self.header_logo_placeholder.pos())
+        end_rect.moveTo(global_pos)
+        self.animation_end_rect = end_rect
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # If the animation is in progress, update its end value
+        if self.animation_played and hasattr(self, 'logo_animation') and self.logo_animation.state() == QPropertyAnimation.State.Running:
+            self.update_animation_end_rect()
+            self.logo_animation.setEndValue(self.animation_end_rect)
+
+    def start_animation(self):
+        self.update_animation_end_rect()  # Set the final position
+
+        start_rect = self.logo_label.geometry()
 
         # Animation for the logo
         self.logo_animation = QPropertyAnimation(self.logo_label, b"geometry")
         self.logo_animation.setDuration(2500)
         self.logo_animation.setStartValue(start_rect)
-        self.logo_animation.setEndValue(end_rect)
+        self.logo_animation.setEndValue(self.animation_end_rect)
         self.logo_animation.setEasingCurve(QEasingCurve.Type.OutQuint)
 
         # Animations for fading in the other widgets
@@ -157,11 +173,9 @@ class HomePage(QMainWindow):
         header_layout.setContentsMargins(0, 0, 0, 10)
         header_layout.setSpacing(15)
 
-        # Placeholder for the logo in the header
-        self.header_logo_placeholder = QLabel()
-        placeholder_height = 120
-        placeholder_width = int(placeholder_height * self.aspect_ratio)
-        self.header_logo_placeholder.setFixedSize(placeholder_width, placeholder_height)
+        self.header_logo_placeholder = ScalableLabel()
+        self.header_logo_placeholder.setMinimumWidth(100) # Prevent from becoming too small
+        self.header_logo_placeholder.setMaximumHeight(120)  # Max height for the logo
 
         title_layout = QVBoxLayout()
         title_layout.setSpacing(0)
@@ -183,8 +197,8 @@ class HomePage(QMainWindow):
         self.update_theme_button_text(self.app_state.current_theme)
 
 
-        header_layout.addWidget(self.header_logo_placeholder)
-        header_layout.addLayout(title_layout)
+        header_layout.addWidget(self.header_logo_placeholder, 0)
+        header_layout.addLayout(title_layout, 1)  # Add stretch factor
         header_layout.addStretch()
         header_layout.addWidget(clock)
         header_layout.addWidget(self.theme_button)
@@ -250,6 +264,7 @@ class HomePage(QMainWindow):
         desc_label.setObjectName("subtitle")
         desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         desc_label.setWordWrap(True)
+        desc_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
 
         button = QPushButton(button_text)
         button.setObjectName("primary")
@@ -365,27 +380,27 @@ class HomePage(QMainWindow):
             self.scanner_logging_window = ScannerLoggingWindow(self.app_state)
         if self.scanner_logging_window.isMinimized():
             self.scanner_logging_window.showNormal()
-        self.scanner_logging_window.show()
-        self.scanner_logging_window.activateWindow()
+        self.scanner_logging_window.showMaximized()
         self.scanner_logging_window.raise_()
+        self.scanner_logging_window.activateWindow()
 
     def open_com_port_setup(self):
         if self.com_port_window is None:
             self.com_port_window = ComPortSetupWindow(self.app_state)
         if self.com_port_window.isMinimized():
             self.com_port_window.showNormal()
-        self.com_port_window.show()
-        self.com_port_window.activateWindow()
+        self.com_port_window.showMaximized()
         self.com_port_window.raise_()
+        self.com_port_window.activateWindow()
 
     def open_file_management(self):
         if self.file_management_window is None:
             self.file_management_window = FileManagementWindow(self.app_state)
         if self.file_management_window.isMinimized():
             self.file_management_window.showNormal()
-        self.file_management_window.show()
-        self.file_management_window.activateWindow()
+        self.file_management_window.showMaximized()
         self.file_management_window.raise_()
+        self.file_management_window.activateWindow()
 
     def closeEvent(self, event):
         self.app_state.stop_scanning()

@@ -47,7 +47,6 @@ class FileManagementWindow(QMainWindow):
         super().__init__()
         self.app_state = app_state
         self.setWindowTitle("Sequence File Management")
-        self.setMinimumSize(800, 700)
         
         self.update_theme(self.app_state.current_theme)
         self.app_state.theme_changed.connect(self.update_theme)
@@ -128,24 +127,25 @@ class FileManagementWindow(QMainWindow):
         title.setObjectName("h2")
         layout.addWidget(title)
 
-        scan_layout = QHBoxLayout()
+        scan_layout = QGridLayout()
         scan_layout.setSpacing(15)
         self.scan_start_card_btn = QPushButton("Scan Start Card")
         self.scan_start_card_btn.setObjectName("primary")
         self.scan_start_card_btn.clicked.connect(self.app_state.scan_and_set_start_card)
-        scan_layout.addWidget(self.scan_start_card_btn, 1) # Added stretch factor
+        scan_layout.addWidget(self.scan_start_card_btn, 0, 0)
         
         self.cancel_start_card_btn = QPushButton("Cancel Scan")
         self.cancel_start_card_btn.setObjectName("secondary")
         self.cancel_start_card_btn.clicked.connect(self.app_state.cancel_start_card_scan)
         self.cancel_start_card_btn.setVisible(False)
-        scan_layout.addWidget(self.cancel_start_card_btn, 1) # Added to scan_layout
+        scan_layout.addWidget(self.cancel_start_card_btn, 0, 1)
 
-        scan_layout.addWidget(QLabel("Current Start Card:"))
+        scan_layout.addWidget(QLabel("Current Start Card:"), 1, 0)
         self.start_card_display = QLineEdit()
         self.start_card_display.setReadOnly(True)
-        scan_layout.addWidget(self.start_card_display, 2) # Increased stretch factor
-        scan_layout.addStretch(1) # Added stretch to scan_layout
+        scan_layout.addWidget(self.start_card_display, 1, 1, 1, 2)
+
+        scan_layout.setColumnStretch(2, 1)
 
         count_frame = QFrame()
         count_frame.setObjectName("accentPanel")
@@ -189,7 +189,6 @@ class FileManagementWindow(QMainWindow):
         fields_layout.addWidget(QLabel("Total:"), 2, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         self.total_count_field = QLineEdit()
         self.total_count_field.setReadOnly(True)
-        self.total_count_field.setFixedWidth(80) # Keep fixed width for total for now
         fields_layout.addWidget(self.total_count_field, 2, 1)
 
         count_layout.addLayout(count_actions_layout)
@@ -223,16 +222,16 @@ class FileManagementWindow(QMainWindow):
         
         stats_frame = QFrame()
         stats_frame.setObjectName("accentPanel")
-        stats_layout = QHBoxLayout(stats_frame)
+        stats_layout = QGridLayout(stats_frame)
         stats_layout.setContentsMargins(20,20,20,20)
         self.total_scanned_label = QLabel("0")
         self.scanned_ok_label = QLabel("0")
         self.error_not_ok_label = QLabel("0")
         self.skipped_label = QLabel("0")
-        stats_layout.addWidget(self.create_stat("Total Scans:", self.total_scanned_label))
-        stats_layout.addWidget(self.create_stat("Successful Scans:", self.scanned_ok_label))
-        stats_layout.addWidget(self.create_stat("Failed Scans:", self.error_not_ok_label))
-        stats_layout.addWidget(self.create_stat("Skipped Entries:", self.skipped_label))
+        stats_layout.addWidget(self.create_stat("Total Scans:", self.total_scanned_label), 0, 0)
+        stats_layout.addWidget(self.create_stat("Successful Scans:", self.scanned_ok_label), 0, 1)
+        stats_layout.addWidget(self.create_stat("Failed Scans:", self.error_not_ok_label), 1, 0)
+        stats_layout.addWidget(self.create_stat("Skipped Entries:", self.skipped_label), 1, 1)
         
         layout.addWidget(title)
         layout.addLayout(button_layout)

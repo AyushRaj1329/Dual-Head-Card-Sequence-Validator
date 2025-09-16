@@ -1,5 +1,6 @@
 # src/ui/widgets.py
 from PyQt6.QtWidgets import QLabel, QDialog, QVBoxLayout, QDialogButtonBox, QPushButton
+from PyQt6.QtGui import QPainter
 from PyQt6.QtCore import QTimer, QTime, pyqtSignal, Qt
 from datetime import datetime
 
@@ -24,6 +25,25 @@ class ClockWidget(QLabel):
         # Slicing microseconds to get 3-digit milliseconds
         formatted_time = now.strftime("%Y-%m-%d | %H:%M:%S.%f")[:-3] + now.strftime(" %Z")
         self.setText(formatted_time)
+
+class ScalableLabel(QLabel):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setMinimumSize(1, 1)
+
+    def paintEvent(self, event):
+        if self.pixmap():
+            pm = self.pixmap()
+            if not pm.isNull():
+                painter = QPainter(self)
+                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+                target_rect = self.rect()
+                scaled_pixmap = pm.scaled(target_rect.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                x = (target_rect.width() - scaled_pixmap.width()) / 2
+                y = (target_rect.height() - scaled_pixmap.height()) / 2
+                painter.drawPixmap(int(x), int(y), scaled_pixmap)
+        else:
+            super().paintEvent(event)
 
 # --- NEW DIALOG CLASS ---
 class ApprovalDialog(QDialog):

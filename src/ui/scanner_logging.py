@@ -4,7 +4,7 @@ import os
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QMessageBox, QAbstractItemView, QStackedLayout, QTableWidget, QTableWidgetItem, QHeaderView,
-    QFrame, QApplication, QGraphicsRotation
+    QFrame, QApplication, QGraphicsRotation, QGridLayout
 )
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtProperty
 from PyQt6.QtGui import QColor, QMovie, QTransform
@@ -145,15 +145,15 @@ class ScannerLoggingWindow(QMainWindow):
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(25,20,25,25)
 
-        columns_layout = QHBoxLayout()
+        columns_layout = QGridLayout()
         columns_layout.setSpacing(25)
         self.scanner_input_label = QLabel()
         self.current_card_label = QLabel()
         self.next_card_label = QLabel()
 
-        columns_layout.addWidget(self.create_display_column("Last Scanned ID", self.scanner_input_label))
-        columns_layout.addWidget(self.create_display_column("Previous Validated ID", self.current_card_label))
-        columns_layout.addWidget(self.create_display_column("Next Expected ID", self.next_card_label))
+        columns_layout.addWidget(self.create_display_column("Last Scanned ID", self.scanner_input_label), 0, 0)
+        columns_layout.addWidget(self.create_display_column("Previous Validated ID", self.current_card_label), 0, 1)
+        columns_layout.addWidget(self.create_display_column("Next Expected ID", self.next_card_label), 0, 2)
 
         layout.addLayout(columns_layout)
         parent_layout.addWidget(frame)
