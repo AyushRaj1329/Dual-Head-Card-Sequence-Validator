@@ -57,6 +57,7 @@ class ScannerLoggingWindow(QMainWindow):
         self.app_state.log_updated.connect(self.on_log_updated)
         self.app_state.log_cleared.connect(self.on_log_cleared)
         self.app_state.state_changed.connect(self.update_displays)
+        self.app_state.card_type_changed.connect(self.rebuild_log_table)
 
         # --- MODIFIED: Connection for the "not found" alert is removed ---
         self.app_state.mismatch_found_in_sequence.connect(self.show_approval_dialog)
@@ -187,15 +188,7 @@ class ScannerLoggingWindow(QMainWindow):
         header_layout.addStretch()
 
         self.log_table = QTableWidget()
-        self.log_table.setColumnCount(6)
-        self.log_table.setHorizontalHeaderLabels(["Entry #", "Time", "Scanned ID", "Expected ID", "Result", "Scan Side"])
-        header = self.log_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        self.setup_log_table_columns()
         self.log_table.setAlternatingRowColors(True)
         self.log_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
@@ -231,6 +224,37 @@ class ScannerLoggingWindow(QMainWindow):
 
         parent_layout.addWidget(frame, 1)
 
+    def setup_log_table_columns(self):
+        """Setup log table columns based on card type"""
+        from ..card_types import CardType
+        
+        # Single Card: No scan side column (only 1 QR, no sides)
+        # Half/Quarter Card: Show scan side column (multiple QRs, sides matter)
+        if self.app_state.card_type == CardType.SINGLE:
+            self.log_table.setColumnCount(5)
+            self.log_table.setHorizontalHeaderLabels(["Entry #", "Time", "Scanned ID", "Expected ID", "Result"])
+            header = self.log_table.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        else:  # Half or Quarter Card
+            self.log_table.setColumnCount(6)
+            self.log_table.setHorizontalHeaderLabels(["Entry #", "Time", "Scanned ID", "Expected ID", "Result", "Scan Side"])
+            header = self.log_table.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+    
+    def rebuild_log_table(self, card_type):
+        """Rebuild log table when card type changes"""
+        self.setup_log_table_columns()
+        self.display_current_page()
+
     def display_current_page(self):
         self.log_table.setUpdatesEnabled(False)
         self.log_table.setRowCount(0)
@@ -246,10 +270,10 @@ class ScannerLoggingWindow(QMainWindow):
             expected_code = log_entry["expected_code"]
             display_numcard = "---"
 
-            # Find the numcard by searching both left and right QR codes
+            # Find the numcard by searching all QR codes
             found_num = False
-            for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
-                if expected_code == left_qr or expected_code == right_qr:
+            for numcard, qr_codes in self.app_state.numcard_to_qrs.items():
+                if expected_code in qr_codes:
                     display_numcard = str(numcard)
                     found_num = True
                     break
@@ -259,30 +283,6 @@ class ScannerLoggingWindow(QMainWindow):
                     display_numcard = "N/A"
                 elif expected_code == "End of Sequence":
                     display_numcard = "End"
-                elif log_entry["status"] == "SKIPPED":
-                    # In case of skipped, the expected_code might not be in the main lookup, so we find it here
-                    for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
-                        if expected_code == left_qr or expected_code == right_qr:
-                            display_numcard = str(numcard)
-                            break
-                elif log_entry["status"] == "NOT OK":
-                    # Same for NOT OK
-                    for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
-                        if expected_code == left_qr or expected_code == right_qr:
-                            display_numcard = str(numcard)
-                            break
-                elif log_entry["status"] == "SKIPPED":
-                    # In case of skipped, the expected_code might not be in the main lookup, so we find it here
-                    for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
-                        if expected_code == left_qr or expected_code == right_qr:
-                            display_numcard = str(numcard)
-                            break
-                elif log_entry["status"] == "NOT OK":
-                    # Same for NOT OK
-                    for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
-                        if expected_code == left_qr or expected_code == right_qr:
-                            display_numcard = str(numcard)
-                            break
 
             self.log_table.setItem(row_position, 0, QTableWidgetItem(display_numcard))
             self.log_table.setItem(row_position, 1, QTableWidgetItem(log_entry["timestamp"]))
@@ -299,7 +299,11 @@ class ScannerLoggingWindow(QMainWindow):
                 status_item.setForeground(QColor("#2ecc71"))
 
             self.log_table.setItem(row_position, 4, status_item)
-            self.log_table.setItem(row_position, 5, QTableWidgetItem(log_entry.get("scanned_side", "N/A")))
+            
+            # Add scan side column only for Half and Quarter cards
+            from ..card_types import CardType
+            if self.app_state.card_type != CardType.SINGLE:
+                self.log_table.setItem(row_position, 5, QTableWidgetItem(log_entry.get("scanned_side", "N/A")))
 
         total_items = len(self.filtered_log_entries)
         total_pages = (total_items + self.items_per_page - 1) // self.items_per_page
@@ -355,7 +359,7 @@ class ScannerLoggingWindow(QMainWindow):
         has_port = bool(self.app_state.selected_com_port)
         has_file = bool(self.app_state.expected_cards)
 
-        self.start_btn.setEnabled(not is_scanning and has_port and has_file and self.app_state.start_card_has_been_scanned)
+        self.start_btn.setEnabled(not is_scanning and has_port and has_file)
         self.stop_btn.setEnabled(is_scanning)
 
         idx = self.app_state.current_card_index
@@ -369,12 +373,15 @@ class ScannerLoggingWindow(QMainWindow):
         else:
             self.current_card_label.setText("No file loaded")
 
-        if cards and idx < len(cards) and self.app_state.start_card_has_been_scanned:
-            self.next_card_label.setText(cards[idx][scan_side_index])
+        if cards and idx < len(cards):
+            if self.app_state.start_card_has_been_scanned:
+                self.next_card_label.setText(cards[idx][scan_side_index])
+            else:
+                self.next_card_label.setText("Start scanning to set start card")
         elif has_file and self.app_state.start_card_has_been_scanned:
             self.next_card_label.setText("End of Sequence")
         elif has_file:
-            self.next_card_label.setText("Scan Start Card")
+            self.next_card_label.setText("Start scanning to set start card")
         else:
             self.next_card_label.setText("No file loaded")
 

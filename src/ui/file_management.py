@@ -10,9 +10,10 @@ from PyQt6.QtCore import Qt
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
 from .widgets import ClockWidget
 import constants
+from ..card_types import CardType
 
 class PreviewWindow(QDialog):
-    def __init__(self, expected_cards, parent=None):
+    def __init__(self, expected_cards, card_type, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Preview Sequence Data")
 
@@ -25,18 +26,25 @@ class PreviewWindow(QDialog):
         if not expected_cards:
             layout.addWidget(QLabel("No expected cards loaded."))
         else:
-            table = QTableWidget(len(expected_cards), 3)
-            table.setHorizontalHeaderLabels(["Card Number", "Left QR (ICCID)", "Right QR (IMSI)"])
+            # Determine number of columns based on card type
+            qr_labels = CardType.get_qr_labels(card_type)
+            num_columns = 1 + len(qr_labels)  # Card Number + QR codes
+            
+            table = QTableWidget(len(expected_cards), num_columns)
+            headers = ["Card Number"] + qr_labels
+            table.setHorizontalHeaderLabels(headers)
             table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
             header = table.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+            for i in range(1, num_columns):
+                header.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
 
-            for row, (numcard, left_qr, right_qr) in enumerate(expected_cards):
+            for row, card in enumerate(expected_cards):
+                numcard = card[0]
+                qr_codes = card[1:]
                 table.setItem(row, 0, QTableWidgetItem(str(numcard)))
-                table.setItem(row, 1, QTableWidgetItem(str(left_qr)))
-                table.setItem(row, 2, QTableWidgetItem(str(right_qr)))
+                for col, qr_code in enumerate(qr_codes, start=1):
+                    table.setItem(row, col, QTableWidgetItem(str(qr_code)))
             
             layout.addWidget(table)
 
@@ -71,6 +79,7 @@ class FileManagementWindow(QMainWindow):
         self.app_state.start_card_scan_complete.connect(self.handle_start_card_scan_complete)
         self.app_state.card_count_update.connect(self.handle_card_count_update)
         self.app_state.ondemand_scan_status_update.connect(self.handle_ondemand_scan_status)
+        self.app_state.card_type_changed.connect(self.rebuild_card_details_fields)
         self.update_ui()
 
     def create_header(self, parent_layout):
@@ -127,25 +136,68 @@ class FileManagementWindow(QMainWindow):
         title.setObjectName("h2")
         layout.addWidget(title)
 
-        scan_layout = QGridLayout()
-        scan_layout.setSpacing(15)
-        self.scan_start_card_btn = QPushButton("Scan Start Card")
-        self.scan_start_card_btn.setObjectName("primary")
-        self.scan_start_card_btn.clicked.connect(self.app_state.scan_and_set_start_card)
-        scan_layout.addWidget(self.scan_start_card_btn, 0, 0)
+        # Card Details Section
+        details_frame = QFrame()
+        details_frame.setObjectName("accentPanel")
+        details_layout = QVBoxLayout(details_frame)
+        details_layout.setSpacing(10)
+
+        details_actions_layout = QHBoxLayout()
+        self.scan_card_details_btn = QPushButton("Scan Card Details")
+        self.scan_card_details_btn.setObjectName("primary")
+        self.scan_card_details_btn.clicked.connect(self.app_state.scan_and_get_card_details)
+        self.scan_card_details_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.scan_card_details_btn.setMinimumWidth(120)
         
-        self.cancel_start_card_btn = QPushButton("Cancel Scan")
-        self.cancel_start_card_btn.setObjectName("secondary")
-        self.cancel_start_card_btn.clicked.connect(self.app_state.cancel_start_card_scan)
-        self.cancel_start_card_btn.setVisible(False)
-        scan_layout.addWidget(self.cancel_start_card_btn, 0, 1)
+        self.cancel_card_details_btn = QPushButton("Cancel Scan")
+        self.cancel_card_details_btn.setObjectName("secondary")
+        self.cancel_card_details_btn.clicked.connect(self.app_state.cancel_card_details_scan)
+        self.cancel_card_details_btn.setVisible(False)
+        self.cancel_card_details_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.cancel_card_details_btn.setMinimumWidth(120)
 
-        scan_layout.addWidget(QLabel("Current Start Card:"), 1, 0)
-        self.start_card_display = QLineEdit()
-        self.start_card_display.setReadOnly(True)
-        scan_layout.addWidget(self.start_card_display, 1, 1, 1, 2)
+        details_actions_layout.addWidget(self.scan_card_details_btn)
+        details_actions_layout.addWidget(self.cancel_card_details_btn)
+        details_actions_layout.addStretch(1)
 
-        scan_layout.setColumnStretch(2, 1)
+        self.card_details_status_label = QLabel("Click 'Scan Card Details' to view card information.")
+        self.card_details_status_label.setObjectName("subtitle")
+
+        details_fields_layout = QGridLayout()
+        details_fields_layout.setSpacing(10)
+        
+        # Card Number field
+        details_fields_layout.addWidget(QLabel("Card Number:"), 0, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.card_number_field = QLineEdit()
+        self.card_number_field.setReadOnly(True)
+        details_fields_layout.addWidget(self.card_number_field, 0, 1)
+        
+        # Dynamic QR fields based on card type
+        qr_labels = CardType.get_qr_labels(self.app_state.card_type)
+        self.qr_fields = []
+        for i, label in enumerate(qr_labels, start=1):
+            details_fields_layout.addWidget(QLabel(f"{label}:"), i, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+            qr_field = QLineEdit()
+            qr_field.setReadOnly(True)
+            details_fields_layout.addWidget(qr_field, i, 1)
+            self.qr_fields.append(qr_field)
+        
+        # Position field
+        position_row = len(qr_labels) + 1
+        details_fields_layout.addWidget(QLabel("Position:"), position_row, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.position_field = QLineEdit()
+        self.position_field.setReadOnly(True)
+        details_fields_layout.addWidget(self.position_field, position_row, 1)
+
+        # Store references for rebuilding
+        self.details_layout = details_layout
+        self.details_fields_layout = details_fields_layout
+        self.qr_field_labels = []  # Store label widgets for cleanup
+        
+        details_layout.addLayout(details_actions_layout)
+        details_layout.addWidget(self.card_details_status_label)
+        details_layout.addLayout(details_fields_layout)
+        details_layout.addStretch(1)
 
         count_frame = QFrame()
         count_frame.setObjectName("accentPanel")
@@ -196,7 +248,7 @@ class FileManagementWindow(QMainWindow):
         count_layout.addLayout(fields_layout)
         count_layout.addStretch(1)
 
-        layout.addLayout(scan_layout)
+        layout.addWidget(details_frame)
         layout.addWidget(count_frame)
         layout.addStretch(1)
         parent_layout.addWidget(frame)
@@ -263,7 +315,7 @@ class FileManagementWindow(QMainWindow):
 
         self.preview_btn.setEnabled(has_file)
         self.clear_btn.setEnabled(has_file)
-        self.scan_start_card_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan and not is_scanning)
+        self.scan_card_details_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan and not is_scanning)
         self.count_cards_btn.setEnabled(has_file and has_start_card_port and not is_waiting_for_scan)
         self.download_btn.setEnabled(has_logs)
         self.clear_logs_btn.setEnabled(has_logs)
@@ -272,8 +324,6 @@ class FileManagementWindow(QMainWindow):
             self.file_status.setText(f"Active Sequence: {os.path.basename(self.app_state.selected_file_path)}")
         else:
             self.file_status.setText("No sequence file loaded.")
-
-        self.start_card_display.setText(self.app_state.start_card_code or "None")
 
         total = len(self.app_state.log_data)
         ok = len([log for log in self.app_state.log_data if log["status"] == "OK" or log["status"] == "OK (JUMPED)"])
@@ -322,14 +372,38 @@ class FileManagementWindow(QMainWindow):
         if not self.app_state.expected_cards:
             QMessageBox.warning(self, "Warning", "No file loaded to preview.")
             return
-        dialog = PreviewWindow(self.app_state.expected_cards, self)
+        dialog = PreviewWindow(self.app_state.expected_cards, self.app_state.card_type, self)
         dialog.exec()
 
     def handle_start_card_scan_complete(self, message, success):
         if success:
-            QMessageBox.information(self, "Success", message)
+            # Parse the message and populate fields
+            lines = message.split('\n')
+            qr_labels = CardType.get_qr_labels(self.app_state.card_type)
+            qr_field_index = 0
+            
+            for line in lines:
+                if line.startswith("Card Number:"):
+                    self.card_number_field.setText(line.split(":", 1)[1].strip())
+                elif line.startswith("Position:"):
+                    self.position_field.setText(line.split(":", 1)[1].strip())
+                else:
+                    # Check if this line matches any QR label
+                    for label in qr_labels:
+                        if line.startswith(f"{label}:"):
+                            if qr_field_index < len(self.qr_fields):
+                                self.qr_fields[qr_field_index].setText(line.split(":", 1)[1].strip())
+                                qr_field_index += 1
+                            break
+            
+            self.card_details_status_label.setText("Card details loaded successfully.")
         else:
-            QMessageBox.critical(self, "Scan Failed", message)
+            # Clear fields and show error
+            self.card_number_field.clear()
+            for qr_field in self.qr_fields:
+                qr_field.clear()
+            self.position_field.clear()
+            self.card_details_status_label.setText(message)
         self.update_ui() # Re-enable buttons
 
     def handle_card_count_update(self, type, message):
@@ -348,22 +422,28 @@ class FileManagementWindow(QMainWindow):
             self.card_count_status_label.setText("Click 'Count Card Range' to begin.")
 
     def handle_ondemand_scan_status(self, status, message):
-        self.card_count_status_label.setText(message)
         if status == 'active':
-            self.scan_start_card_btn.setEnabled(False)
-            self.count_cards_btn.setEnabled(False)
-            
+            # Determine which operation is active and update the appropriate status label
             if self.app_state.is_waiting_for_start_card:
-                self.cancel_start_card_btn.setVisible(True)
+                self.card_details_status_label.setText(message)
+                self.scan_card_details_btn.setEnabled(False)
+                self.count_cards_btn.setEnabled(False)
+                self.cancel_card_details_btn.setVisible(True)
                 self.cancel_count_cards_btn.setVisible(False)
             elif self.app_state.is_waiting_for_count_card_1 or self.app_state.is_waiting_for_count_card_2:
-                self.cancel_start_card_btn.setVisible(False)
+                self.card_count_status_label.setText(message)
+                self.scan_card_details_btn.setEnabled(False)
+                self.count_cards_btn.setEnabled(False)
+                self.cancel_card_details_btn.setVisible(False)
                 self.cancel_count_cards_btn.setVisible(True)
-            else:
-                self.cancel_start_card_btn.setVisible(False)
-                self.cancel_count_cards_btn.setVisible(False)
         else: # idle, complete, or error
-            self.cancel_start_card_btn.setVisible(False)
+            if message:
+                # Update the appropriate status label based on which was last active
+                if hasattr(self, 'card_details_status_label'):
+                    self.card_details_status_label.setText("Click 'Scan Card Details' to view card information.")
+                if hasattr(self, 'card_count_status_label'):
+                    self.card_count_status_label.setText("Click 'Count Card Range' to begin.")
+            self.cancel_card_details_btn.setVisible(False)
             self.cancel_count_cards_btn.setVisible(False)
             self.update_ui()
 
@@ -375,28 +455,45 @@ class FileManagementWindow(QMainWindow):
         if file_path:
             try:
                 with open(file_path, 'w', newline='', encoding='utf-8') as f:
-                    writer = csv.DictWriter(f, fieldnames=['index', 'timestamp', 'scanned_code', 'expected_code', 'status', 'scanned_side'])
+                    # Include scan_side for Half and Quarter cards only
+                    if self.app_state.card_type == CardType.SINGLE:
+                        fieldnames = ['index', 'timestamp', 'scanned_code', 'expected_code', 'status']
+                    else:
+                        fieldnames = ['index', 'timestamp', 'scanned_code', 'expected_code', 'status', 'scanned_side']
+                    
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
                     writer.writeheader()
                     
                     indexed_log_data = []
                     for log_entry in self.app_state.log_data:
-                        indexed_entry = log_entry.copy()
+                        indexed_entry = {}
                         expected_code = log_entry.get("expected_code", "N/A")
                         display_numcard = "---"
                         found_num = False
-                        for numcard, (left_qr, right_qr) in self.app_state.numcard_to_qrs.items():
-                            if expected_code == left_qr or expected_code == right_qr:
+                        
+                        # Find numcard by searching all QR codes
+                        for numcard, qr_codes in self.app_state.numcard_to_qrs.items():
+                            if expected_code in qr_codes:
                                 display_numcard = str(numcard)
                                 found_num = True
                                 break
+                        
                         if not found_num:
-                            if expected_code == "N/A": display_numcard = "N/A"
-                            elif expected_code == "End of Sequence": display_numcard = "End"
+                            if expected_code == "N/A": 
+                                display_numcard = "N/A"
+                            elif expected_code == "End of Sequence": 
+                                display_numcard = "End"
 
                         indexed_entry['index'] = display_numcard
-                        indexed_entry['timestamp'] = "'" + str(indexed_entry.get('timestamp', ''))
-                        indexed_entry['scanned_code'] = "'" + str(indexed_entry.get('scanned_code', ''))
-                        indexed_entry['expected_code'] = "'" + str(indexed_entry.get('expected_code', ''))
+                        indexed_entry['timestamp'] = "'" + str(log_entry.get('timestamp', ''))
+                        indexed_entry['scanned_code'] = "'" + str(log_entry.get('scanned_code', ''))
+                        indexed_entry['expected_code'] = "'" + str(log_entry.get('expected_code', ''))
+                        indexed_entry['status'] = log_entry.get('status', '')
+                        
+                        # Add scan_side for Half and Quarter cards
+                        if self.app_state.card_type != CardType.SINGLE:
+                            indexed_entry['scanned_side'] = log_entry.get('scanned_side', 'N/A')
+                        
                         indexed_log_data.append(indexed_entry)
 
                     writer.writerows(indexed_log_data)
@@ -413,6 +510,55 @@ class FileManagementWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self.app_state.clear_logs()
             QMessageBox.information(self, "Success", "Logs have been cleared.")
+
+    def rebuild_card_details_fields(self, card_type):
+        """Rebuild the card details fields when card type changes"""
+        # Clear all items from the grid layout
+        while self.details_fields_layout.count():
+            item = self.details_fields_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Reset lists
+        self.qr_fields = []
+        self.qr_field_labels = []
+        
+        # Rebuild the entire grid layout
+        # Row 0: Card Number
+        card_num_label = QLabel("Card Number:")
+        self.details_fields_layout.addWidget(card_num_label, 0, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.card_number_field = QLineEdit()
+        self.card_number_field.setReadOnly(True)
+        self.details_fields_layout.addWidget(self.card_number_field, 0, 1)
+        
+        # Rows 1+: Dynamic QR fields based on card type
+        qr_labels = CardType.get_qr_labels(card_type)
+        for i, label_text in enumerate(qr_labels, start=1):
+            label = QLabel(f"{label_text}:")
+            self.details_fields_layout.addWidget(label, i, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+            self.qr_field_labels.append(label)
+            
+            qr_field = QLineEdit()
+            qr_field.setReadOnly(True)
+            self.details_fields_layout.addWidget(qr_field, i, 1)
+            self.qr_fields.append(qr_field)
+        
+        # Last row: Position field
+        position_row = len(qr_labels) + 1
+        position_label = QLabel("Position:")
+        self.details_fields_layout.addWidget(position_label, position_row, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.position_field = QLineEdit()
+        self.position_field.setReadOnly(True)
+        self.details_fields_layout.addWidget(self.position_field, position_row, 1)
+        
+        # Update status label
+        card_type_names = {
+            CardType.SINGLE: "Single Card",
+            CardType.HALF: "Half Card",
+            CardType.QUARTER: "Quarter Card"
+        }
+        card_type_name = card_type_names.get(card_type, "Unknown")
+        self.card_details_status_label.setText(f"Card type changed to: {card_type_name}. Click 'Scan Card Details' to view card information.")
 
     def update_theme(self, theme_name):
         if theme_name == "dark":

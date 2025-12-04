@@ -16,6 +16,7 @@ from .ui.widgets import ApprovalDialog
 import constants
 from .logic.file_parser import parse_file
 from .services.com_writer import ComPortWriter
+from .card_types import CardType
 
 APP_NAME = "CardSequenceValidator"
 APP_AUTHOR = "YourCompany"
@@ -105,12 +106,14 @@ class AppState(QObject):
     ondemand_scan_status_update = pyqtSignal(str, str)
     theme_changed = pyqtSignal(str)
     start_card_scan_complete = pyqtSignal(str, bool)
+    card_type_changed = pyqtSignal(object)  # Emits CardType enum
 
     mismatch_found_in_sequence = pyqtSignal(str, int, int)
     card_count_update = pyqtSignal(str, str)
 
-    def __init__(self):
+    def __init__(self, card_type=CardType.HALF):
         super().__init__()
+        self.card_type = card_type
         self.main_port_reader = None
         self.ondemand_port_reader = None
         self.output_com_writer = ComPortWriter()
@@ -122,12 +125,14 @@ class AppState(QObject):
         self.is_scanning = False
         self.output_formats = {}
         self.selected_output_format = ""
-        self.scan_side = "left"
+        self.scan_side = CardType.get_default_scan_side(card_type)
         self.selected_file_path = ""
         self.expected_cards = []
-        self.left_qr_to_index = {}
-        self.right_qr_to_index = {}
+        
+        # Dynamic QR code lookup dictionaries based on card type
+        self.qr_to_index = {}  # Generic lookup: qr_code -> (index, position)
         self.numcard_to_qrs = {}
+        
         self.current_card_index = 0
         self.start_card_has_been_scanned = False
         self.first_scan_received = True
@@ -184,6 +189,11 @@ class AppState(QObject):
                 self.current_theme = cache.get('current_theme', "dark")
                 self.start_card_code = cache.get('start_card_code')
                 
+                # Load card type from cache (but don't override constructor parameter)
+                cached_card_type = cache.get('card_type')
+                if cached_card_type and not hasattr(self, '_card_type_set_by_user'):
+                    self.card_type = CardType.from_string(cached_card_type)
+                
                 selected_file_path = cache.get('selected_file_path')
                 if selected_file_path:
                     self.load_file(selected_file_path)
@@ -196,6 +206,7 @@ class AppState(QObject):
 
     def save_cache(self):
         cache_data = {
+            'card_type': self.card_type.value,
             'selected_com_port': self.selected_com_port,
             'start_card_scan_port': self.start_card_scan_port,
             'selected_output_port': self.selected_output_port,
@@ -233,6 +244,11 @@ class AppState(QObject):
         self.is_scanning = True
         self.main_port_reader.start_reading()
         self.com_status_changed.emit(self.selected_com_port, "green")
+        
+        # Set start card on first scan if not already set
+        if not self.start_card_has_been_scanned:
+            self.first_scan_received = True
+        
         self.state_changed.emit()
 
     def stop_scanning(self):
@@ -245,23 +261,71 @@ class AppState(QObject):
 
     def handle_main_scan(self, scanned_code):
         log_entry = None
-        scanned_side = self.scan_side.capitalize()
+        
+        # Get scan side label for logging
+        scan_side_labels = {
+            "single": "Single",
+            "left": "Left",
+            "right": "Right",
+            "top_left": "Top-Left",
+            "top_right": "Top-Right",
+            "bottom_left": "Bottom-Left",
+            "bottom_right": "Bottom-Right"
+        }
+        scanned_side = scan_side_labels.get(self.scan_side, self.scan_side.replace('_', ' ').title())
+
+        # Set start card on first scan
+        if self.first_scan_received and not self.start_card_has_been_scanned:
+            if scanned_code in self.qr_to_index:
+                found_index, position = self.qr_to_index[scanned_code]
+                
+                # Set scan side based on position and card type
+                if self.card_type == CardType.SINGLE:
+                    self.scan_side = "single"
+                elif self.card_type == CardType.HALF:
+                    self.scan_side = "left" if position == 0 else "right"
+                elif self.card_type == CardType.QUARTER:
+                    scan_sides = ["top_left", "top_right", "bottom_left", "bottom_right"]
+                    self.scan_side = scan_sides[position] if position < len(scan_sides) else "top_left"
+                
+                self.set_start_index(found_index)
+                self.start_card_has_been_scanned = True
+                self.start_card_code = scanned_code
+                self.first_scan_received = False
+                scanned_side = scan_side_labels.get(self.scan_side, self.scan_side.replace('_', ' ').title())
+            else:
+                # Card not found in sequence, log as error
+                log_entry = self.add_log_entry(scanned_code, "N/A", "NOT IN SEQUENCE", scanned_side)
+                if log_entry:
+                    self.log_updated.emit([log_entry])
+                self.state_changed.emit()
+                return
 
         if not self.expected_cards:
             log_entry = self.add_log_entry(scanned_code, "N/A", "NO FILE", scanned_side)
         elif self.current_card_index >= len(self.expected_cards):
             log_entry = self.add_log_entry(scanned_code, "End of Sequence", "EXTRA SCAN", scanned_side)
         else:
-            expected_qr = self.expected_cards[self.current_card_index][1 if self.scan_side == 'left' else 2]
+            # Get expected QR based on scan side and card type
+            if self.card_type == CardType.SINGLE:
+                expected_qr = self.expected_cards[self.current_card_index][1]  # Position 1 (after numcard)
+            elif self.card_type == CardType.HALF:
+                qr_position = 1 if self.scan_side == 'left' else 2
+                expected_qr = self.expected_cards[self.current_card_index][qr_position]
+            elif self.card_type == CardType.QUARTER:
+                position_map = {"top_left": 1, "top_right": 2, "bottom_left": 3, "bottom_right": 4}
+                qr_position = position_map.get(self.scan_side, 1)
+                expected_qr = self.expected_cards[self.current_card_index][qr_position]
+            
             if scanned_code == expected_qr:
                 status = "OK"
                 log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
                 self.send_output_signal(status)
                 self.current_card_index += 1
             else:
-                lookup_dict = self.left_qr_to_index if self.scan_side == 'left' else self.right_qr_to_index
-                if scanned_code in lookup_dict:
-                    future_match_index = lookup_dict[scanned_code]
+                # Check if scanned code exists elsewhere in sequence
+                if scanned_code in self.qr_to_index:
+                    future_match_index, _ = self.qr_to_index[scanned_code]
                     if future_match_index > self.current_card_index:
                         num_skipped = future_match_index - self.current_card_index
                         self.pause_scanning()
@@ -349,31 +413,64 @@ class AppState(QObject):
 
     def load_file(self, file_path):
         try:
-            self.expected_cards = parse_file(file_path)
-            self.left_qr_to_index = {left_qr: i for i, (_, left_qr, _) in enumerate(self.expected_cards)}
-            self.right_qr_to_index = {right_qr: i for i, (_, _, right_qr) in enumerate(self.expected_cards)}
-            self.numcard_to_qrs = {numcard: (left_qr, right_qr) for numcard, left_qr, right_qr in self.expected_cards}
+            # Auto-detect card type from file and parse
+            self.expected_cards, detected_card_type = parse_file(file_path, card_type=None)
+            
+            # Update card type if it changed
+            old_card_type = self.card_type
+            self.card_type = detected_card_type
+            
+            # Reset scan side to default for new card type
+            self.scan_side = CardType.get_default_scan_side(self.card_type)
+            
+            # Emit signal if card type changed
+            if old_card_type != self.card_type:
+                self.card_type_changed.emit(self.card_type)
+            
+            # Build QR lookup dictionaries based on card type
+            self.qr_to_index = {}
+            self.numcard_to_qrs = {}
+            
+            for i, card in enumerate(self.expected_cards):
+                numcard = card[0]
+                qr_codes = card[1:]  # All QR codes after numcard
+                
+                # Map each QR code to its index and position
+                for pos, qr_code in enumerate(qr_codes):
+                    self.qr_to_index[qr_code] = (i, pos)
+                
+                # Map numcard to all its QR codes
+                self.numcard_to_qrs[numcard] = qr_codes
+            
             self.selected_file_path = file_path
             self.current_card_index = 0
             self.start_card_has_been_scanned = False
             self.first_scan_received = True
 
             if self.start_card_code:
-                is_valid = self.start_card_code in self.left_qr_to_index or self.start_card_code in self.right_qr_to_index
+                is_valid = self.start_card_code in self.qr_to_index
                 if is_valid:
-                    found_index = self.left_qr_to_index.get(self.start_card_code, self.right_qr_to_index.get(self.start_card_code))
+                    found_index, _ = self.qr_to_index[self.start_card_code]
                     self.set_start_index(found_index)
                     self.start_card_has_been_scanned = True
                 else:
                     self.start_card_code = None
             
             self.state_changed.emit()
-            return True, f"Loaded {len(self.expected_cards)} cards."
+            
+            # Get card type name for user feedback
+            card_type_names = {
+                CardType.SINGLE: "Single Card",
+                CardType.HALF: "Half Card",
+                CardType.QUARTER: "Quarter Card"
+            }
+            card_type_name = card_type_names.get(self.card_type, "Unknown")
+            
+            return True, f"Loaded {len(self.expected_cards)} cards. Detected type: {card_type_name}"
         except Exception as e:
             self.selected_file_path = ""
             self.expected_cards = []
-            self.left_qr_to_index = {}
-            self.right_qr_to_index = {}
+            self.qr_to_index = {}
             self.numcard_to_qrs = {}
             self.state_changed.emit()
             return False, f"Error loading file: {e}"
@@ -381,8 +478,7 @@ class AppState(QObject):
     def clear_file(self):
         self.selected_file_path = ""
         self.expected_cards = []
-        self.left_qr_to_index = {}
-        self.right_qr_to_index = {}
+        self.qr_to_index = {}
         self.numcard_to_qrs = {}
         self.current_card_index = 0
         self.start_card_code = None
@@ -408,15 +504,15 @@ class AppState(QObject):
         self.save_cache()
         self.theme_changed.emit(theme_name)
 
-    def scan_and_set_start_card(self):
+    def scan_and_get_card_details(self):
         if not self.ondemand_port_reader:
             QMessageBox.warning(None, "Configuration Error", "The 'On-Demand Scanner Port' must be configured in COM Port Setup before this action can be performed.")
             return
         if not self.expected_cards:
-            QMessageBox.warning(None, "File Error", "A sequence file must be loaded before setting the start card.")
+            QMessageBox.warning(None, "File Error", "A sequence file must be loaded before scanning card details.")
             return
         self.is_waiting_for_start_card = True
-        self.ondemand_scan_status_update.emit("active", "Scan the START card...")
+        self.ondemand_scan_status_update.emit("active", "Scan a card to view its details...")
 
     def start_card_counting(self):
         if not self.ondemand_port_reader:
@@ -438,7 +534,7 @@ class AppState(QObject):
         self.card_count_update.emit('clear', '')
         self.ondemand_scan_status_update.emit("", "Scan cancelled. Click a button to start.")
 
-    def cancel_start_card_scan(self):
+    def cancel_card_details_scan(self):
         self.is_waiting_for_start_card = False
         self._reset_ondemand_scan_state()
 
@@ -458,22 +554,21 @@ class AppState(QObject):
 
     def process_start_card_scan(self, scanned_code):
         self.is_waiting_for_start_card = False
-        if scanned_code in self.left_qr_to_index:
-            self.scan_side = "left"
-            found_index = self.left_qr_to_index[scanned_code]
-            self.set_start_index(found_index)
-            self.start_card_has_been_scanned = True
-            self.start_card_code = scanned_code
-            card_num = self.expected_cards[found_index][0]
-            self.start_card_scan_complete.emit(f"Start card set to {card_num}. Scan side: Left.", True)
-        elif scanned_code in self.right_qr_to_index:
-            self.scan_side = "right"
-            found_index = self.right_qr_to_index[scanned_code]
-            self.set_start_index(found_index)
-            self.start_card_has_been_scanned = True
-            self.start_card_code = scanned_code
-            card_num = self.expected_cards[found_index][0]
-            self.start_card_scan_complete.emit(f"Start card set to {card_num}. Scan side: Right.", True)
+        if scanned_code in self.qr_to_index:
+            found_index, _ = self.qr_to_index[scanned_code]
+            card = self.expected_cards[found_index]
+            card_num = card[0]
+            qr_codes = card[1:]  # All QR codes after numcard
+            
+            # Build details string based on card type
+            qr_labels = CardType.get_qr_labels(self.card_type)
+            details = f"Card Number: {card_num}\n"
+            
+            for i, (label, qr_code) in enumerate(zip(qr_labels, qr_codes)):
+                details += f"{label}: {qr_code}\n"
+            
+            details += f"Position: {found_index + 1} of {len(self.expected_cards)}"
+            self.start_card_scan_complete.emit(details, True)
         else:
             self.start_card_scan_complete.emit(f"Scanned card {scanned_code} not found in file.", False)
             self.ondemand_scan_status_update.emit("", "Scan complete.")
@@ -482,10 +577,9 @@ class AppState(QObject):
     def process_count_card_1(self, scanned_code):
         self.is_waiting_for_count_card_1 = False
         scanned_index = -1
-        if scanned_code in self.left_qr_to_index:
-            scanned_index = self.left_qr_to_index[scanned_code]
-        elif scanned_code in self.right_qr_to_index:
-            scanned_index = self.right_qr_to_index[scanned_code]
+        
+        if scanned_code in self.qr_to_index:
+            scanned_index, _ = self.qr_to_index[scanned_code]
 
         if scanned_index == -1:
             self.card_count_update.emit('error', f"First card '{scanned_code}' not found.")
@@ -499,10 +593,9 @@ class AppState(QObject):
     def process_count_card_2(self, scanned_code):
         self.is_waiting_for_count_card_2 = False
         scanned_index = -1
-        if scanned_code in self.left_qr_to_index:
-            scanned_index = self.left_qr_to_index[scanned_code]
-        elif scanned_code in self.right_qr_to_index:
-            scanned_index = self.right_qr_to_index[scanned_code]
+        
+        if scanned_code in self.qr_to_index:
+            scanned_index, _ = self.qr_to_index[scanned_code]
 
         if scanned_index == -1:
             self.card_count_update.emit('error', f"Last card '{scanned_code}' not found.")
@@ -530,16 +623,36 @@ class AppState(QObject):
         thread.start()
 
     def _perform_mismatch_resolution(self, scanned_code, approved, future_index):
-        expected_qr = self.expected_cards[self.current_card_index][1 if self.scan_side == 'left' else 2]
-        scanned_side = self.scan_side.capitalize()
+        # Get expected QR based on card type and scan side
+        if self.card_type == CardType.SINGLE:
+            qr_position = 1
+        elif self.card_type == CardType.HALF:
+            qr_position = 1 if self.scan_side == 'left' else 2
+        elif self.card_type == CardType.QUARTER:
+            position_map = {"top_left": 1, "top_right": 2, "bottom_left": 3, "bottom_right": 4}
+            qr_position = position_map.get(self.scan_side, 1)
+        
+        expected_qr = self.expected_cards[self.current_card_index][qr_position]
+        
+        # Get scan side label
+        scan_side_labels = {
+            "single": "Single",
+            "left": "Left",
+            "right": "Right",
+            "top_left": "Top-Left",
+            "top_right": "Top-Right",
+            "bottom_left": "Bottom-Left",
+            "bottom_right": "Bottom-Right"
+        }
+        scanned_side = scan_side_labels.get(self.scan_side, self.scan_side.replace('_', ' ').title())
         log_entries = []
 
         if approved and future_index != -1:
             for i in range(self.current_card_index, future_index):
-                skipped_qr = self.expected_cards[i][1 if self.scan_side == 'left' else 2]
+                skipped_qr = self.expected_cards[i][qr_position]
                 log_entries.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
             
-            expected_jumped_qr = self.expected_cards[future_index][1 if self.scan_side == 'left' else 2]
+            expected_jumped_qr = self.expected_cards[future_index][qr_position]
             log_entries.append(self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side))
             self.send_output_signal("OK (JUMPED)")
             self.current_card_index = future_index + 1
