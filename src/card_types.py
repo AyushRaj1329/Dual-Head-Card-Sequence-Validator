@@ -19,11 +19,11 @@ class CardType(Enum):
     
     @staticmethod
     def get_qr_labels(card_type):
-        """Return the labels for QR codes based on card type"""
+        """Return the labels for QR codes based on card type - all using ICCID"""
         labels = {
-            CardType.SINGLE: ["QR Code"],
-            CardType.HALF: ["Left QR (ICCID)", "Right QR (IMSI)"],
-            CardType.QUARTER: ["Top-Left QR", "Top-Right QR", "Bottom-Left QR", "Bottom-Right QR"]
+            CardType.SINGLE: ["ICCID"],
+            CardType.HALF: ["Left ICCID", "Right ICCID"],
+            CardType.QUARTER: ["Top-Left ICCID", "Top-Right ICCID", "Bottom-Left ICCID", "Bottom-Right ICCID"]
         }
         return labels.get(card_type, labels[CardType.HALF])
     

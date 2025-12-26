@@ -42,7 +42,7 @@ class CardTypeSelector(QDialog):
         # Single Card Option
         self.single_card_option = self.create_card_option(
             "Single Card",
-            "One QR code per card",
+            "One ICCID per card",
             "single"
         )
         layout.addWidget(self.single_card_option)
@@ -50,7 +50,7 @@ class CardTypeSelector(QDialog):
         # Half Card Option (Default)
         self.half_card_option = self.create_card_option(
             "Half Card (Default)",
-            "Two QR codes per card: Left (ICCID) and Right (IMSI)",
+            "Two ICCIDs per card: Left and Right positions",
             "half"
         )
         layout.addWidget(self.half_card_option)
@@ -58,7 +58,7 @@ class CardTypeSelector(QDialog):
         # Quarter Card Option
         self.quarter_card_option = self.create_card_option(
             "Quarter Card",
-            "Four QR codes per card: Top-Left, Top-Right, Bottom-Left, Bottom-Right",
+            "Four ICCIDs per card: Top-Left, Top-Right, Bottom-Left, Bottom-Right",
             "quarter"
         )
         layout.addWidget(self.quarter_card_option)

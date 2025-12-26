@@ -196,7 +196,9 @@ class AppState(QObject):
                 
                 selected_file_path = cache.get('selected_file_path')
                 if selected_file_path:
-                    self.load_file(selected_file_path)
+                    # Don't auto-load files anymore - require manual selection with card type
+                    # Just store the path for reference
+                    self.selected_file_path = selected_file_path
                 
                 self.log_data = cache.get('log_data', [])
                 self.log_updated.emit(self.log_data)
@@ -411,14 +413,18 @@ class AppState(QObject):
         if self.main_port_reader:
             self.main_port_reader.resume()
 
-    def load_file(self, file_path):
+    def load_file(self, file_path, card_type=None):
+        """Load file with manually specified card type (no auto-detection)"""
+        if card_type is None:
+            return False, "Card type must be selected manually. Please choose Single, Half, or Quarter card type."
+        
         try:
-            # Auto-detect card type from file and parse
-            self.expected_cards, detected_card_type = parse_file(file_path, card_type=None)
+            # Parse file with specified card type
+            self.expected_cards, _ = parse_file(file_path, card_type)
             
-            # Update card type if it changed
+            # Update card type
             old_card_type = self.card_type
-            self.card_type = detected_card_type
+            self.card_type = card_type
             
             # Reset scan side to default for new card type
             self.scan_side = CardType.get_default_scan_side(self.card_type)
@@ -466,7 +472,7 @@ class AppState(QObject):
             }
             card_type_name = card_type_names.get(self.card_type, "Unknown")
             
-            return True, f"Loaded {len(self.expected_cards)} cards. Detected type: {card_type_name}"
+            return True, f"Loaded {len(self.expected_cards)} cards as {card_type_name} type."
         except Exception as e:
             self.selected_file_path = ""
             self.expected_cards = []

@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushBu
 from PyQt6.QtCore import Qt
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
 from .widgets import ClockWidget
+from .card_type_selector import CardTypeSelector
 import constants
 from ..card_types import CardType
 
@@ -339,29 +340,48 @@ class FileManagementWindow(QMainWindow):
         self.app_state.stop_scanning()
         file_path, _ = QFileDialog.getOpenFileName(self, "Select File", "", constants.FILE_FILTER)
         if file_path:
-            if self.app_state.log_data:
-                msg_box = QMessageBox(self)
-                msg_box.setWindowTitle("Unsaved Log Data Detected")
-                msg_box.setText("Unsaved log data from a previous session was detected. Would you like to export it before proceeding, or clear it and continue?")
-                download_button = msg_box.addButton("Export and Clear Logs", QMessageBox.ButtonRole.AcceptRole)
-                clear_button = msg_box.addButton("Clear Logs and Continue", QMessageBox.ButtonRole.DestructiveRole)
-                cancel_button = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
-                msg_box.exec()
+            # Show card type selector dialog
+            card_type_dialog = CardTypeSelector(self)
+            if self.current_theme:
+                if self.current_theme == "dark":
+                    card_type_dialog.setStyleSheet(DARK_THEME_STYLESHEET)
+                else:
+                    card_type_dialog.setStyleSheet(LIGHT_THEME_STYLESHEET)
+            
+            if card_type_dialog.exec() == QDialog.DialogCode.Accepted:
+                selected_type_str = card_type_dialog.get_selected_card_type()
+                if selected_type_str:
+                    # Convert string to CardType enum
+                    card_type_map = {
+                        "single": CardType.SINGLE,
+                        "half": CardType.HALF,
+                        "quarter": CardType.QUARTER
+                    }
+                    selected_card_type = card_type_map.get(selected_type_str, CardType.HALF)
+                    
+                    if self.app_state.log_data:
+                        msg_box = QMessageBox(self)
+                        msg_box.setWindowTitle("Unsaved Log Data Detected")
+                        msg_box.setText("Unsaved log data from a previous session was detected. Would you like to export it before proceeding, or clear it and continue?")
+                        download_button = msg_box.addButton("Export and Clear Logs", QMessageBox.ButtonRole.AcceptRole)
+                        clear_button = msg_box.addButton("Clear Logs and Continue", QMessageBox.ButtonRole.DestructiveRole)
+                        cancel_button = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+                        msg_box.exec()
 
-                clicked_button = msg_box.clickedButton()
+                        clicked_button = msg_box.clickedButton()
 
-                if clicked_button == download_button:
-                    if not self.download_logs(): return
-                    self.app_state.clear_logs()
-                elif clicked_button == clear_button:
-                    self.app_state.clear_logs()
-                else: return
+                        if clicked_button == download_button:
+                            if not self.download_logs(): return
+                            self.app_state.clear_logs()
+                        elif clicked_button == clear_button:
+                            self.app_state.clear_logs()
+                        else: return
 
-            success, message = self.app_state.load_file(file_path)
-            if success:
-                QMessageBox.information(self, "Success", message)
-            else:
-                QMessageBox.critical(self, "Error", message)
+                    success, message = self.app_state.load_file(file_path, selected_card_type)
+                    if success:
+                        QMessageBox.information(self, "Success", message)
+                    else:
+                        QMessageBox.critical(self, "Error", message)
 
     def clear_file(self):
         self.app_state.stop_scanning()
@@ -561,6 +581,7 @@ class FileManagementWindow(QMainWindow):
         self.card_details_status_label.setText(f"Card type changed to: {card_type_name}. Click 'Scan Card Details' to view card information.")
 
     def update_theme(self, theme_name):
+        self.current_theme = theme_name
         if theme_name == "dark":
             self.setStyleSheet(DARK_THEME_STYLESHEET)
         else:
