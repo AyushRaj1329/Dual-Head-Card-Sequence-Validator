@@ -134,6 +134,7 @@ class AppState(QObject):
         self.numcard_to_qrs = {}
         
         self.current_card_index = 0
+        self.scan_direction = "top_to_bottom"  # "top_to_bottom" or "bottom_to_top"
         self.start_card_has_been_scanned = False
         self.first_scan_received = True
         self.log_data = []
@@ -188,6 +189,7 @@ class AppState(QObject):
                 self.selected_output_format = cache.get('selected_output_format', "")
                 self.current_theme = cache.get('current_theme', "dark")
                 self.start_card_code = cache.get('start_card_code')
+                self.scan_direction = cache.get('scan_direction', 'top_to_bottom')
                 
                 # Load card type from cache (but don't override constructor parameter)
                 cached_card_type = cache.get('card_type')
@@ -220,6 +222,7 @@ class AppState(QObject):
             'selected_output_format': self.selected_output_format,
             'selected_file_path': self.selected_file_path,
             'start_card_code': self.start_card_code,
+            'scan_direction': self.scan_direction,
             'log_data': self.log_data,
             'current_theme': self.current_theme
         }
@@ -305,37 +308,55 @@ class AppState(QObject):
 
         if not self.expected_cards:
             log_entry = self.add_log_entry(scanned_code, "N/A", "NO FILE", scanned_side)
-        elif self.current_card_index >= len(self.expected_cards):
+        elif self.is_scan_complete():
             log_entry = self.add_log_entry(scanned_code, "End of Sequence", "EXTRA SCAN", scanned_side)
         else:
+            # Get the actual card index based on scan direction
+            actual_card_index = self.get_current_expected_card_index()
+            
             # Get expected QR based on scan side and card type
             if self.card_type == CardType.SINGLE:
-                expected_qr = self.expected_cards[self.current_card_index][1]  # Position 1 (after numcard)
+                expected_qr = self.expected_cards[actual_card_index][1]  # Position 1 (after numcard)
             elif self.card_type == CardType.HALF:
                 qr_position = 1 if self.scan_side == 'left' else 2
-                expected_qr = self.expected_cards[self.current_card_index][qr_position]
+                expected_qr = self.expected_cards[actual_card_index][qr_position]
             elif self.card_type == CardType.QUARTER:
                 position_map = {"top_left": 1, "top_right": 2, "bottom_left": 3, "bottom_right": 4}
                 qr_position = position_map.get(self.scan_side, 1)
-                expected_qr = self.expected_cards[self.current_card_index][qr_position]
+                expected_qr = self.expected_cards[actual_card_index][qr_position]
             
             if scanned_code == expected_qr:
                 status = "OK"
                 log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
                 self.send_output_signal(status)
-                self.current_card_index += 1
+                self.increment_card_index()
             else:
                 # Check if scanned code exists elsewhere in sequence
                 if scanned_code in self.qr_to_index:
                     future_match_index, _ = self.qr_to_index[scanned_code]
-                    if future_match_index > self.current_card_index:
-                        num_skipped = future_match_index - self.current_card_index
-                        self.pause_scanning()
-                        self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_match_index)
+                    
+                    # For bottom-to-top scanning, we need to adjust the comparison logic
+                    if self.scan_direction == "bottom_to_top":
+                        # Convert future_match_index to bottom-to-top equivalent
+                        future_match_bottom_to_top = len(self.expected_cards) - 1 - future_match_index
+                        if future_match_bottom_to_top > self.current_card_index:
+                            num_skipped = future_match_bottom_to_top - self.current_card_index
+                            self.pause_scanning()
+                            self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_match_bottom_to_top)
+                        else:
+                            status = "NOT OK"
+                            log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
+                            self.send_output_signal(status)
                     else:
-                        status = "NOT OK"
-                        log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
-                        self.send_output_signal(status)
+                        # Top-to-bottom logic (original)
+                        if future_match_index > actual_card_index:
+                            num_skipped = future_match_index - actual_card_index
+                            self.pause_scanning()
+                            self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_match_index)
+                        else:
+                            status = "NOT OK"
+                            log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
+                            self.send_output_signal(status)
                 else:
                     status = "NOT OK"
                     log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
@@ -617,6 +638,30 @@ class AppState(QObject):
         
         self.first_card_index = -1
 
+    def get_current_expected_card_index(self):
+        """Get the current card index based on scan direction"""
+        if self.scan_direction == "bottom_to_top":
+            # For bottom-to-top, start from the end and work backwards
+            return len(self.expected_cards) - 1 - self.current_card_index
+        else:
+            # For top-to-bottom, use normal indexing
+            return self.current_card_index
+    
+    def increment_card_index(self):
+        """Increment card index (same for both directions)"""
+        self.current_card_index += 1
+    
+    def is_scan_complete(self):
+        """Check if scanning is complete"""
+        return self.current_card_index >= len(self.expected_cards)
+    
+    def get_scan_direction_description(self):
+        """Get user-friendly description of current scan direction"""
+        if self.scan_direction == "bottom_to_top":
+            return "Bottom → Top (Last card first)"
+        else:
+            return "Top → Bottom (First card first)"
+
     def send_output_signal(self, status):
         if not self.output_com_writer.is_connected: return
         output_signal = self.output_formats.get(self.selected_output_format, {}).get(status)
@@ -629,6 +674,9 @@ class AppState(QObject):
         thread.start()
 
     def _perform_mismatch_resolution(self, scanned_code, approved, future_index):
+        # Get the actual card index based on scan direction
+        actual_card_index = self.get_current_expected_card_index()
+        
         # Get expected QR based on card type and scan side
         if self.card_type == CardType.SINGLE:
             qr_position = 1
@@ -638,7 +686,7 @@ class AppState(QObject):
             position_map = {"top_left": 1, "top_right": 2, "bottom_left": 3, "bottom_right": 4}
             qr_position = position_map.get(self.scan_side, 1)
         
-        expected_qr = self.expected_cards[self.current_card_index][qr_position]
+        expected_qr = self.expected_cards[actual_card_index][qr_position]
         
         # Get scan side label
         scan_side_labels = {
@@ -654,14 +702,36 @@ class AppState(QObject):
         log_entries = []
 
         if approved and future_index != -1:
-            for i in range(self.current_card_index, future_index):
-                skipped_qr = self.expected_cards[i][qr_position]
-                log_entries.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
-            
-            expected_jumped_qr = self.expected_cards[future_index][qr_position]
-            log_entries.append(self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side))
-            self.send_output_signal("OK (JUMPED)")
-            self.current_card_index = future_index + 1
+            # Handle skipping based on scan direction
+            if self.scan_direction == "bottom_to_top":
+                # For bottom-to-top, convert future_index back to actual array index
+                actual_future_index = len(self.expected_cards) - 1 - future_index
+                start_skip = actual_card_index
+                end_skip = actual_future_index
+                
+                # Skip cards in reverse order for bottom-to-top
+                for i in range(start_skip, end_skip, -1):
+                    skipped_qr = self.expected_cards[i][qr_position]
+                    log_entries.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
+                
+                expected_jumped_qr = self.expected_cards[actual_future_index][qr_position]
+                log_entries.append(self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side))
+                self.send_output_signal("OK (JUMPED)")
+                self.current_card_index = future_index + 1
+            else:
+                # Top-to-bottom logic (original)
+                for i in range(actual_card_index, future_index):
+                    skipped_qr = self.expected_cards[i][qr_position]
+                    log_entries.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
+                
+                expected_jumped_qr = self.expected_cards[future_index][qr_position]
+                log_entries.append(self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side))
+                self.send_output_signal("OK (JUMPED)")
+                # Convert future_index to current_card_index based on direction
+                if self.scan_direction == "bottom_to_top":
+                    self.current_card_index = len(self.expected_cards) - future_index
+                else:
+                    self.current_card_index = future_index + 1
         else:
             log_entries.append(self.add_log_entry(scanned_code, expected_qr, "NOT OK", scanned_side))
             self.send_output_signal("NOT OK")

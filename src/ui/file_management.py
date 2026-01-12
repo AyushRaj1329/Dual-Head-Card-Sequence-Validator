@@ -119,10 +119,32 @@ class FileManagementWindow(QMainWindow):
         
         button_layout.addWidget(self.preview_btn)
         button_layout.addWidget(self.clear_btn)
+        
+        # Add scan direction toggle
+        direction_layout = QHBoxLayout()
+        direction_label = QLabel("Scan Direction:")
+        direction_label.setObjectName("subtitle")
+        
+        self.scan_direction_toggle = QPushButton("🔄 Top → Bottom")
+        self.scan_direction_toggle.setObjectName("secondary")
+        self.scan_direction_toggle.setCheckable(True)
+        self.scan_direction_toggle.clicked.connect(self.toggle_scan_direction)
+        self.scan_direction_toggle.setToolTip(
+            "Toggle between scanning directions:\n"
+            "• Top → Bottom: Scan cards 1, 2, 3... (normal order)\n"
+            "• Bottom → Top: Scan cards from end to beginning\n\n"
+            "Useful when cards are physically arranged in reverse order."
+        )
+        
+        direction_layout.addWidget(direction_label)
+        direction_layout.addWidget(self.scan_direction_toggle)
+        direction_layout.addStretch()
+        
         button_layout.addStretch()
         layout.addWidget(title)
         layout.addWidget(file_button)
         layout.addWidget(self.file_status)
+        layout.addLayout(direction_layout)
         layout.addLayout(button_layout)
         parent_layout.addWidget(frame)
 
@@ -303,6 +325,32 @@ class FileManagementWindow(QMainWindow):
         layout.addWidget(value_label)
         return widget
         
+    def toggle_scan_direction(self):
+        """Toggle between top-to-bottom and bottom-to-top scanning"""
+        if self.app_state.scan_direction == "top_to_bottom":
+            self.app_state.scan_direction = "bottom_to_top"
+            self.scan_direction_toggle.setText("🔄 Bottom → Top")
+            self.scan_direction_toggle.setChecked(True)
+        else:
+            self.app_state.scan_direction = "top_to_bottom"
+            self.scan_direction_toggle.setText("🔄 Top → Bottom")
+            self.scan_direction_toggle.setChecked(False)
+        
+        # Reset current position when direction changes
+        self.app_state.current_card_index = 0
+        self.app_state.start_card_has_been_scanned = False
+        self.app_state.first_scan_received = True
+        
+        # Save the new setting
+        self.app_state.save_cache()
+        self.app_state.state_changed.emit()
+        
+        # Show feedback to user
+        direction_desc = self.app_state.get_scan_direction_description()
+        QMessageBox.information(self, "Scan Direction Changed", 
+                              f"Scan direction changed to: {direction_desc}\n\n"
+                              f"The scanning position has been reset. You may need to set a new start card.")
+
     def update_ui(self):
         has_file = bool(self.app_state.expected_cards)
         has_logs = bool(self.app_state.log_data)
@@ -335,6 +383,14 @@ class FileManagementWindow(QMainWindow):
         self.scanned_ok_label.setText(str(ok))
         self.error_not_ok_label.setText(str(error))
         self.skipped_label.setText(str(skipped))
+        
+        # Update scan direction toggle button
+        if self.app_state.scan_direction == "bottom_to_top":
+            self.scan_direction_toggle.setText("🔄 Bottom → Top")
+            self.scan_direction_toggle.setChecked(True)
+        else:
+            self.scan_direction_toggle.setText("🔄 Top → Bottom")
+            self.scan_direction_toggle.setChecked(False)
 
     def select_file(self):
         self.app_state.stop_scanning()

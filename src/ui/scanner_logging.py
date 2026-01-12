@@ -364,18 +364,29 @@ class ScannerLoggingWindow(QMainWindow):
 
         idx = self.app_state.current_card_index
         cards = self.app_state.expected_cards
+        
+        # Get the actual card index based on scan direction
+        if self.app_state.scan_direction == "bottom_to_top" and cards:
+            actual_idx = len(cards) - 1 - idx
+        else:
+            actual_idx = idx
+        
         scan_side_index = 1 if self.app_state.scan_side == 'left' else 2
 
-        if cards and idx > 0 and idx <= len(cards):
-            self.current_card_label.setText(cards[idx - 1][scan_side_index])
+        if cards and idx > 0 and actual_idx >= 0 and actual_idx < len(cards):
+            prev_actual_idx = len(cards) - idx if self.app_state.scan_direction == "bottom_to_top" else idx - 1
+            if prev_actual_idx >= 0 and prev_actual_idx < len(cards):
+                self.current_card_label.setText(cards[prev_actual_idx][scan_side_index])
+            else:
+                self.current_card_label.setText("N/A")
         elif has_file and idx == 0:
             self.current_card_label.setText("N/A")
         else:
             self.current_card_label.setText("No file loaded")
 
-        if cards and idx < len(cards):
+        if cards and idx < len(cards) and actual_idx >= 0 and actual_idx < len(cards):
             if self.app_state.start_card_has_been_scanned:
-                self.next_card_label.setText(cards[idx][scan_side_index])
+                self.next_card_label.setText(cards[actual_idx][scan_side_index])
             else:
                 self.next_card_label.setText("Start scanning to set start card")
         elif has_file and self.app_state.start_card_has_been_scanned:
