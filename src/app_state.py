@@ -335,20 +335,22 @@ class AppState(QObject):
                 if scanned_code in self.qr_to_index:
                     future_match_index, _ = self.qr_to_index[scanned_code]
                     
-                    # For bottom-to-top scanning, we need to adjust the comparison logic
+                    # Compare actual array indices for both directions
                     if self.scan_direction == "bottom_to_top":
-                        # Convert future_match_index to bottom-to-top equivalent
-                        future_match_bottom_to_top = len(self.expected_cards) - 1 - future_match_index
-                        if future_match_bottom_to_top > self.current_card_index:
-                            num_skipped = future_match_bottom_to_top - self.current_card_index
+                        # For bottom-to-top, check if future card comes BEFORE current in array
+                        if future_match_index < actual_card_index:
+                            # Calculate number of cards to skip (in scan order)
+                            num_skipped = actual_card_index - future_match_index
+                            # Convert future_match_index to scan position for UI
+                            future_scan_position = len(self.expected_cards) - 1 - future_match_index
                             self.pause_scanning()
-                            self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_match_bottom_to_top)
+                            self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_scan_position)
                         else:
                             status = "NOT OK"
                             log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
                             self.send_output_signal(status)
                     else:
-                        # Top-to-bottom logic (original)
+                        # Top-to-bottom logic: check if future card comes AFTER current
                         if future_match_index > actual_card_index:
                             num_skipped = future_match_index - actual_card_index
                             self.pause_scanning()
@@ -704,22 +706,25 @@ class AppState(QObject):
         if approved and future_index != -1:
             # Handle skipping based on scan direction
             if self.scan_direction == "bottom_to_top":
-                # For bottom-to-top, convert future_index back to actual array index
+                # For bottom-to-top: future_index is scan position, convert to array index
                 actual_future_index = len(self.expected_cards) - 1 - future_index
-                start_skip = actual_card_index
-                end_skip = actual_future_index
                 
-                # Skip cards in reverse order for bottom-to-top
-                for i in range(start_skip, end_skip, -1):
-                    skipped_qr = self.expected_cards[i][qr_position]
-                    log_entries.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
+                # Skip cards from current array position down to future array position
+                # Range should go from actual_card_index down to actual_future_index (exclusive)
+                if actual_card_index > actual_future_index:
+                    for i in range(actual_card_index - 1, actual_future_index - 1, -1):
+                        if i >= 0:  # Bounds check
+                            skipped_qr = self.expected_cards[i][qr_position]
+                            log_entries.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
                 
                 expected_jumped_qr = self.expected_cards[actual_future_index][qr_position]
                 log_entries.append(self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side))
                 self.send_output_signal("OK (JUMPED)")
+                # Set current_card_index to scan position after the jumped card
                 self.current_card_index = future_index + 1
             else:
-                # Top-to-bottom logic (original)
+                # Top-to-bottom: future_index is already array index
+                # Skip cards from current array position up to future array position
                 for i in range(actual_card_index, future_index):
                     skipped_qr = self.expected_cards[i][qr_position]
                     log_entries.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
@@ -727,11 +732,8 @@ class AppState(QObject):
                 expected_jumped_qr = self.expected_cards[future_index][qr_position]
                 log_entries.append(self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side))
                 self.send_output_signal("OK (JUMPED)")
-                # Convert future_index to current_card_index based on direction
-                if self.scan_direction == "bottom_to_top":
-                    self.current_card_index = len(self.expected_cards) - future_index
-                else:
-                    self.current_card_index = future_index + 1
+                # Set current_card_index to scan position after the jumped card
+                self.current_card_index = future_index + 1
         else:
             log_entries.append(self.add_log_entry(scanned_code, expected_qr, "NOT OK", scanned_side))
             self.send_output_signal("NOT OK")
