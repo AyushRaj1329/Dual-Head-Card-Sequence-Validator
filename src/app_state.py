@@ -719,10 +719,10 @@ class AppState(QObject):
                 # For bottom-to-top: future_index is scan position, convert to array index
                 actual_future_index = len(self.expected_cards) - 1 - future_index
                 
-                # Skip cards from current array position down to future array position
-                # Range should go from actual_card_index down to actual_future_index (exclusive)
+                # Skip cards from current array position down to future array position (exclusive)
+                # Range should go from (actual_card_index - 1) down to (actual_future_index + 1)
                 if actual_card_index > actual_future_index:
-                    for i in range(actual_card_index - 1, actual_future_index - 1, -1):
+                    for i in range(actual_card_index - 1, actual_future_index, -1):
                         if i >= 0:  # Bounds check
                             skipped_qr = self.expected_cards[i][qr_position]
                             log_entries.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
@@ -731,7 +731,8 @@ class AppState(QObject):
                 log_entries.append(self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side))
                 self.send_output_signal("OK (JUMPED)")
                 # Set current_card_index to scan position after the jumped card
-                self.current_card_index = future_index + 1
+                # For bottom-to-top: convert array index back to scan position
+                self.current_card_index = len(self.expected_cards) - actual_future_index
             else:
                 # Top-to-bottom: future_index is already array index
                 # Skip cards from current array position up to future array position
@@ -743,6 +744,7 @@ class AppState(QObject):
                 log_entries.append(self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side))
                 self.send_output_signal("OK (JUMPED)")
                 # Set current_card_index to scan position after the jumped card
+                # For top-to-bottom: array index equals scan position
                 self.current_card_index = future_index + 1
         else:
             log_entries.append(self.add_log_entry(scanned_code, expected_qr, "NOT OK", scanned_side))
