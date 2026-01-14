@@ -333,32 +333,51 @@ class AppState(QObject):
             else:
                 # Check if scanned code exists elsewhere in sequence
                 if scanned_code in self.qr_to_index:
-                    future_match_index, _ = self.qr_to_index[scanned_code]
+                    future_match_index, scanned_position = self.qr_to_index[scanned_code]
                     
-                    # Compare actual array indices for both directions
-                    if self.scan_direction == "bottom_to_top":
-                        # For bottom-to-top, check if future card comes BEFORE current in array
-                        if future_match_index < actual_card_index:
-                            # Calculate number of cards to skip (in scan order)
-                            num_skipped = actual_card_index - future_match_index
-                            # Convert future_match_index to scan position for UI
-                            future_scan_position = len(self.expected_cards) - 1 - future_match_index
-                            self.pause_scanning()
-                            self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_scan_position)
-                        else:
-                            status = "NOT OK"
-                            log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
-                            self.send_output_signal(status)
+                    # Determine the expected position based on card type and scan side
+                    if self.card_type == CardType.SINGLE:
+                        expected_position = 0  # Only one position for single cards
+                    elif self.card_type == CardType.HALF:
+                        expected_position = 0 if self.scan_side == 'left' else 1
+                    elif self.card_type == CardType.QUARTER:
+                        position_map = {"top_left": 0, "top_right": 1, "bottom_left": 2, "bottom_right": 3}
+                        expected_position = position_map.get(self.scan_side, 0)
                     else:
-                        # Top-to-bottom logic: check if future card comes AFTER current
-                        if future_match_index > actual_card_index:
-                            num_skipped = future_match_index - actual_card_index
-                            self.pause_scanning()
-                            self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_match_index)
+                        expected_position = 0
+                    
+                    # Check if the scanned QR is from the correct side
+                    if scanned_position != expected_position:
+                        # Wrong side scanned - just mark as NOT OK (simplified status)
+                        status = "NOT OK"
+                        log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
+                        self.send_output_signal("NOT OK")
+                    else:
+                        # Correct side, check if it's ahead in sequence
+                        # Compare actual array indices for both directions
+                        if self.scan_direction == "bottom_to_top":
+                            # For bottom-to-top, check if future card comes BEFORE current in array
+                            if future_match_index < actual_card_index:
+                                # Calculate number of cards to skip (in scan order)
+                                num_skipped = actual_card_index - future_match_index
+                                # Convert future_match_index to scan position for UI
+                                future_scan_position = len(self.expected_cards) - 1 - future_match_index
+                                self.pause_scanning()
+                                self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_scan_position)
+                            else:
+                                status = "NOT OK"
+                                log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
+                                self.send_output_signal(status)
                         else:
-                            status = "NOT OK"
-                            log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
-                            self.send_output_signal(status)
+                            # Top-to-bottom logic: check if future card comes AFTER current
+                            if future_match_index > actual_card_index:
+                                num_skipped = future_match_index - actual_card_index
+                                self.pause_scanning()
+                                self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_match_index)
+                            else:
+                                status = "NOT OK"
+                                log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
+                                self.send_output_signal(status)
                 else:
                     status = "NOT OK"
                     log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
