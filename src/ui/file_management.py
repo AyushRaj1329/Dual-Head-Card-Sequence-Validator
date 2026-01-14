@@ -328,10 +328,18 @@ class FileManagementWindow(QMainWindow):
         
     def toggle_scan_direction(self):
         """Toggle between top-to-bottom and bottom-to-top scanning"""
-        # Store old direction and position
+        # Check if scanning has already started
+        if self.app_state.start_card_has_been_scanned and self.app_state.current_card_index > 0:
+            QMessageBox.warning(
+                self,
+                "Cannot Toggle Direction",
+                "Scan direction cannot be changed after scanning has started.\n\n"
+                "Please clear the logs and restart scanning to change direction."
+            )
+            return
+        
+        # Store old direction
         old_direction = self.app_state.scan_direction
-        old_index = self.app_state.current_card_index
-        has_scanned_cards = self.app_state.start_card_has_been_scanned and old_index > 0
         
         # Toggle direction
         if self.app_state.scan_direction == "top_to_bottom":
@@ -343,43 +351,10 @@ class FileManagementWindow(QMainWindow):
             self.scan_direction_toggle.setText("🔄 Top → Bottom")
             self.scan_direction_toggle.setChecked(False)
         
-        # Handle position based on whether cards have been scanned
-        if has_scanned_cards and self.app_state.expected_cards:
-            # Cards have been scanned - continue from last scanned card in new direction
-            # Get the actual array index of the last scanned card
-            if old_direction == "top_to_bottom":
-                # Was scanning top-to-bottom, last scanned was at array index (old_index - 1)
-                last_scanned_array_index = old_index - 1
-            else:
-                # Was scanning bottom-to-top, last scanned was at array index
-                last_scanned_array_index = len(self.app_state.expected_cards) - old_index
-            
-            # The next card to scan (in array terms) is last_scanned_array_index + 1
-            next_card_array_index = last_scanned_array_index + 1
-            
-            # Now set current_card_index for the new direction to point to this next card
-            if self.app_state.scan_direction == "top_to_bottom":
-                # New direction is top-to-bottom
-                # current_card_index directly equals array index in this direction
-                self.app_state.current_card_index = next_card_array_index
-            else:
-                # New direction is bottom-to-top
-                # current_card_index = number of cards scanned from bottom
-                # To get to array index X from bottom: current_card_index = total - 1 - X
-                self.app_state.current_card_index = len(self.app_state.expected_cards) - 1 - next_card_array_index
-            
-            # Keep start card scanned status
-            # self.app_state.start_card_has_been_scanned remains True
-            # self.app_state.first_scan_received remains False
-            
-            feedback_msg = f"Direction changed. Continuing from card at position {next_card_array_index + 1} in new direction."
-        else:
-            # No cards scanned yet - reset and treat next scan as first card
-            self.app_state.current_card_index = 0
-            self.app_state.start_card_has_been_scanned = False
-            self.app_state.first_scan_received = True
-            
-            feedback_msg = "Direction changed. Next scan will be treated as the first card."
+        # Reset scanning state - next scan will be treated as first card
+        self.app_state.current_card_index = 0
+        self.app_state.start_card_has_been_scanned = False
+        self.app_state.first_scan_received = True
         
         # Save the new setting
         self.app_state.save_cache()
@@ -387,11 +362,15 @@ class FileManagementWindow(QMainWindow):
         
         # Show feedback to user
         direction_desc = self.app_state.get_scan_direction_description()
-        QMessageBox.information(self, "Scan Direction Changed", 
-                              f"Scan direction changed to: {direction_desc}\n\n"
-                              f"{feedback_msg}")
+        QMessageBox.information(
+            self, 
+            "Scan Direction Changed", 
+            f"Scan direction changed to: {direction_desc}\n\n"
+            f"The first card you scan will be set as the start card.\n"
+            f"Scanning will continue {direction_desc.lower()} from that card."
+        )
         
-        # Navigate to scanner logging window to show last scanned card
+        # Navigate to scanner logging window
         if self.open_scanner_callback:
             self.open_scanner_callback()
 
