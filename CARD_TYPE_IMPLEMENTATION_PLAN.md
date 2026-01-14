@@ -4,7 +4,7 @@
 Implement support for three card types in a single application:
 1. **Single Card**: 1 QR code per card
 2. **Half Card**: 2 QR codes per card (Left/Right or ICCID/IMSI) - **Current Default**
-3. **Quarter Card**: 4 QR codes per card (Top-Left, Top-Right, Bottom-Left, Bottom-Right)
+3. **Quarter Card**: 4 QR codes per card (Bottom-Left, Top-Left, Top-Right, Bottom-Right)
 
 ## Implementation Status
 

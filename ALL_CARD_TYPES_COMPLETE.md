@@ -19,9 +19,9 @@ Successfully implemented support for **all three card types** with automatic det
 - **Status**: Fully Functional
 
 ### ✅ Quarter Card
-- **QR Codes**: 4 per card (Top-Left, Top-Right, Bottom-Left, Bottom-Right)
-- **Scan Sides**: Top-Left, Top-Right, Bottom-Left, Bottom-Right
-- **File Format**: `NUMCARD,TL,TR,BL,BR`
+- **QR Codes**: 4 per card (Bottom-Left, Top-Left, Top-Right, Bottom-Right)
+- **Scan Sides**: Bottom-Left, Top-Left, Top-Right, Bottom-Right
+- **File Format**: `NUMCARD,BL,TL,TR,BR`
 - **Status**: Fully Functional ✨ NEW!
 
 ## Implementation Complete

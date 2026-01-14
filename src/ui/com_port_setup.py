@@ -343,7 +343,18 @@ class ComPortSetupWindow(QMainWindow):
 
     def populate_format_dropdown(self):
         self.output_format_combo.clear()
-        self.output_format_combo.addItems(self.app_state.output_formats.keys() or ["No formats found"])
+        if self.app_state.output_formats:
+            self.output_format_combo.addItems(self.app_state.output_formats.keys())
+            # Set the current selection from app_state
+            if self.app_state.selected_output_format in self.app_state.output_formats:
+                self.output_format_combo.setCurrentText(self.app_state.selected_output_format)
+            elif self.app_state.output_formats:
+                # Default to first format if current selection is invalid
+                first_format = list(self.app_state.output_formats.keys())[0]
+                self.output_format_combo.setCurrentText(first_format)
+                self.app_state.selected_output_format = first_format
+        else:
+            self.output_format_combo.addItems(["No formats found"])
     
     def add_log_entry(self, message, color):
         self.log_text.append(f"[{self.app_state.get_timestamp()}] {message}")

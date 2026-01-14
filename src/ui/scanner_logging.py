@@ -371,7 +371,17 @@ class ScannerLoggingWindow(QMainWindow):
         else:
             actual_idx = idx
         
-        scan_side_index = 1 if self.app_state.scan_side == 'left' else 2
+        # Get scan side index based on card type
+        from ..card_types import CardType
+        if self.app_state.card_type == CardType.SINGLE:
+            scan_side_index = 1  # Only one QR code
+        elif self.app_state.card_type == CardType.HALF:
+            scan_side_index = 1 if self.app_state.scan_side == 'left' else 2
+        elif self.app_state.card_type == CardType.QUARTER:
+            position_map = {"bottom_left": 1, "top_left": 2, "top_right": 3, "bottom_right": 4}
+            scan_side_index = position_map.get(self.app_state.scan_side, 1)
+        else:
+            scan_side_index = 1  # Default fallback
 
         if cards and idx > 0 and actual_idx >= 0 and actual_idx < len(cards):
             prev_actual_idx = len(cards) - idx if self.app_state.scan_direction == "bottom_to_top" else idx - 1

@@ -1,7 +1,7 @@
 # Quarter Card Testing Guide
 
 ## Overview
-Quarter Card support is now **fully implemented**! Cards with 4 QR codes (Top-Left, Top-Right, Bottom-Left, Bottom-Right) are now supported.
+Quarter Card support is now **fully implemented**! Cards with 4 QR codes (Bottom-Left, Top-Left, Top-Right, Bottom-Right) are now supported.
 
 ## What's Implemented
 

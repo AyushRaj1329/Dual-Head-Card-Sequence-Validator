@@ -392,6 +392,15 @@ class AppState(QObject):
     def connect_output_port(self, port):
         if self.output_com_writer.is_connected:
             self.output_com_writer.disconnect()
+        
+        # Handle empty or None port
+        if not port:
+            self.selected_output_port = None
+            self.output_com_status_changed.emit("Not Connected", "red")
+            self.state_changed.emit()
+            self.save_cache()
+            return
+        
         success, message = self.output_com_writer.connect(
             port=port, baudrate=self.baud_rate, bytesize=self.data_bits,
             parity=self.parity, stopbits=self.stop_bits, timeout=self.timeout
@@ -403,6 +412,7 @@ class AppState(QObject):
             self.selected_output_port = None
             self.output_com_status_changed.emit(message, "red")
         self.state_changed.emit()
+        self.save_cache()
 
     def disconnect_all_ports(self):
         self.stop_scanning()

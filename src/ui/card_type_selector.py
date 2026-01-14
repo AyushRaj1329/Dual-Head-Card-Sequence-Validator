@@ -58,7 +58,7 @@ class CardTypeSelector(QDialog):
         # Quarter Card Option
         self.quarter_card_option = self.create_card_option(
             "Quarter Card",
-            "Four ICCIDs per card: Top-Left, Top-Right, Bottom-Left, Bottom-Right",
+            "Four ICCIDs per card: Bottom-Left, Top-Left, Top-Right, Bottom-Right",
             "quarter"
         )
         layout.addWidget(self.quarter_card_option)

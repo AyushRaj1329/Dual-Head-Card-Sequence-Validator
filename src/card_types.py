@@ -23,7 +23,7 @@ class CardType(Enum):
         labels = {
             CardType.SINGLE: ["ICCID"],
             CardType.HALF: ["Left ICCID", "Right ICCID"],
-            CardType.QUARTER: ["Top-Left ICCID", "Top-Right ICCID", "Bottom-Left ICCID", "Bottom-Right ICCID"]
+            CardType.QUARTER: ["Bottom-Left ICCID", "Top-Left ICCID", "Top-Right ICCID", "Bottom-Right ICCID"]
         }
         return labels.get(card_type, labels[CardType.HALF])
     
@@ -33,7 +33,7 @@ class CardType(Enum):
         sides = {
             CardType.SINGLE: ["single"],
             CardType.HALF: ["left", "right"],
-            CardType.QUARTER: ["top_left", "top_right", "bottom_left", "bottom_right"]
+            CardType.QUARTER: ["bottom_left", "top_left", "top_right", "bottom_right"]
         }
         return sides.get(card_type, sides[CardType.HALF])
     
@@ -43,7 +43,7 @@ class CardType(Enum):
         defaults = {
             CardType.SINGLE: "single",
             CardType.HALF: "left",
-            CardType.QUARTER: "top_left"
+            CardType.QUARTER: "bottom_left"
         }
         return defaults.get(card_type, "left")
     

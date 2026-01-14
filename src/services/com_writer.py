@@ -8,6 +8,12 @@ class ComPortWriter:
 
     # --- MODIFIED: connect method now accepts all serial settings ---
     def connect(self, port, baudrate=115200, bytesize=8, parity='N', stopbits=1, timeout=1):
+        # Validate port parameter
+        if not port or port.strip() == "":
+            self.serial_instance = None
+            self.is_connected = False
+            return False, "No port specified"
+        
         try:
             self.serial_instance = serial.Serial(
                 port=port,
@@ -23,6 +29,10 @@ class ComPortWriter:
             self.serial_instance = None
             self.is_connected = False
             return False, f"Failed to connect to output port {port}: {e}"
+        except Exception as e:
+            self.serial_instance = None
+            self.is_connected = False
+            return False, f"Unexpected error connecting to {port}: {e}"
 
     def disconnect(self):
         if self.serial_instance and self.serial_instance.is_open:
