@@ -421,7 +421,7 @@ class HomePage(QMainWindow):
 
     def open_file_management(self):
         if self.file_management_window is None:
-            self.file_management_window = FileManagementWindow(self.app_state)
+            self.file_management_window = FileManagementWindow(self.app_state, self.open_scanner)
         if self.file_management_window.isMinimized():
             self.file_management_window.showNormal()
         self.file_management_window.showMaximized()

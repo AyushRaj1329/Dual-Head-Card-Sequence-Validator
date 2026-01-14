@@ -52,9 +52,10 @@ class PreviewWindow(QDialog):
         self.setMinimumSize(600, 400)
 
 class FileManagementWindow(QMainWindow):
-    def __init__(self, app_state):
+    def __init__(self, app_state, open_scanner_callback=None):
         super().__init__()
         self.app_state = app_state
+        self.open_scanner_callback = open_scanner_callback
         self.setWindowTitle("Sequence File Management")
         
         self.update_theme(self.app_state.current_theme)
@@ -327,6 +328,12 @@ class FileManagementWindow(QMainWindow):
         
     def toggle_scan_direction(self):
         """Toggle between top-to-bottom and bottom-to-top scanning"""
+        # Store old direction and position
+        old_direction = self.app_state.scan_direction
+        old_index = self.app_state.current_card_index
+        has_scanned_cards = self.app_state.start_card_has_been_scanned and old_index > 0
+        
+        # Toggle direction
         if self.app_state.scan_direction == "top_to_bottom":
             self.app_state.scan_direction = "bottom_to_top"
             self.scan_direction_toggle.setText("🔄 Bottom → Top")
@@ -336,10 +343,43 @@ class FileManagementWindow(QMainWindow):
             self.scan_direction_toggle.setText("🔄 Top → Bottom")
             self.scan_direction_toggle.setChecked(False)
         
-        # Reset current position when direction changes
-        self.app_state.current_card_index = 0
-        self.app_state.start_card_has_been_scanned = False
-        self.app_state.first_scan_received = True
+        # Handle position based on whether cards have been scanned
+        if has_scanned_cards and self.app_state.expected_cards:
+            # Cards have been scanned - continue from last scanned card in new direction
+            # Get the actual array index of the last scanned card
+            if old_direction == "top_to_bottom":
+                # Was scanning top-to-bottom, last scanned was at array index (old_index - 1)
+                last_scanned_array_index = old_index - 1
+            else:
+                # Was scanning bottom-to-top, last scanned was at array index
+                last_scanned_array_index = len(self.app_state.expected_cards) - old_index
+            
+            # The next card to scan (in array terms) is last_scanned_array_index + 1
+            next_card_array_index = last_scanned_array_index + 1
+            
+            # Now set current_card_index for the new direction to point to this next card
+            if self.app_state.scan_direction == "top_to_bottom":
+                # New direction is top-to-bottom
+                # current_card_index directly equals array index in this direction
+                self.app_state.current_card_index = next_card_array_index
+            else:
+                # New direction is bottom-to-top
+                # current_card_index = number of cards scanned from bottom
+                # To get to array index X from bottom: current_card_index = total - 1 - X
+                self.app_state.current_card_index = len(self.app_state.expected_cards) - 1 - next_card_array_index
+            
+            # Keep start card scanned status
+            # self.app_state.start_card_has_been_scanned remains True
+            # self.app_state.first_scan_received remains False
+            
+            feedback_msg = f"Direction changed. Continuing from card at position {next_card_array_index + 1} in new direction."
+        else:
+            # No cards scanned yet - reset and treat next scan as first card
+            self.app_state.current_card_index = 0
+            self.app_state.start_card_has_been_scanned = False
+            self.app_state.first_scan_received = True
+            
+            feedback_msg = "Direction changed. Next scan will be treated as the first card."
         
         # Save the new setting
         self.app_state.save_cache()
@@ -349,7 +389,11 @@ class FileManagementWindow(QMainWindow):
         direction_desc = self.app_state.get_scan_direction_description()
         QMessageBox.information(self, "Scan Direction Changed", 
                               f"Scan direction changed to: {direction_desc}\n\n"
-                              f"The scanning position has been reset. You may need to set a new start card.")
+                              f"{feedback_msg}")
+        
+        # Navigate to scanner logging window to show last scanned card
+        if self.open_scanner_callback:
+            self.open_scanner_callback()
 
     def update_ui(self):
         has_file = bool(self.app_state.expected_cards)
