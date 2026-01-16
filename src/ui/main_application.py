@@ -81,6 +81,7 @@ class HomePage(QMainWindow):
             widget.setAutoFillBackground(True)
 
         self.app_state.state_changed.connect(self.update_status_indicators)
+        self.app_state.output_com_status_changed.connect(self.update_output_port_status)
         
         self.update_status_indicators()
 
@@ -400,6 +401,24 @@ class HomePage(QMainWindow):
         
         self.scan_card_com_status_label.style().unpolish(self.scan_card_com_status_label)
         self.scan_card_com_status_label.style().polish(self.scan_card_com_status_label)
+
+    def update_output_port_status(self, message, color):
+        """Update output port status in real-time"""
+        if "Connected to" in message or message.startswith("COM"):
+            # Extract just the port name if it's a connection message
+            port_name = message.replace("Connected to ", "")
+            self.output_com_status_label.setText(port_name)
+            self.output_com_status_label.setObjectName("statusOK")
+        elif "Not Connected" in message or "Not Set" in message:
+            self.output_com_status_label.setText("Not Set")
+            self.output_com_status_label.setObjectName("statusWarning")
+        else:
+            # Error message
+            self.output_com_status_label.setText("Error")
+            self.output_com_status_label.setObjectName("statusError")
+        
+        self.output_com_status_label.style().unpolish(self.output_com_status_label)
+        self.output_com_status_label.style().polish(self.output_com_status_label)
 
     def open_scanner(self):
         if self.scanner_logging_window is None:
