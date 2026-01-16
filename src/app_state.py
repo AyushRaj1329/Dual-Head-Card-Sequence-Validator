@@ -290,8 +290,9 @@ class AppState(QObject):
                 elif self.card_type == CardType.HALF:
                     self.scan_side = "left" if position == 0 else "right"
                 elif self.card_type == CardType.QUARTER:
-                    scan_sides = ["top_left", "top_right", "bottom_left", "bottom_right"]
-                    self.scan_side = scan_sides[position] if position < len(scan_sides) else "top_left"
+                    # Position in tuple: 0=BL, 1=TL, 2=TR, 3=BR
+                    scan_sides = ["bottom_left", "top_left", "top_right", "bottom_right"]
+                    self.scan_side = scan_sides[position] if position < len(scan_sides) else "bottom_left"
                 
                 self.set_start_index(found_index)
                 self.start_card_has_been_scanned = True
@@ -321,7 +322,7 @@ class AppState(QObject):
                 qr_position = 1 if self.scan_side == 'left' else 2
                 expected_qr = self.expected_cards[actual_card_index][qr_position]
             elif self.card_type == CardType.QUARTER:
-                position_map = {"top_left": 1, "top_right": 2, "bottom_left": 3, "bottom_right": 4}
+                position_map = {"bottom_left": 1, "top_left": 2, "top_right": 3, "bottom_right": 4}
                 qr_position = position_map.get(self.scan_side, 1)
                 expected_qr = self.expected_cards[actual_card_index][qr_position]
             
@@ -341,7 +342,7 @@ class AppState(QObject):
                     elif self.card_type == CardType.HALF:
                         expected_position = 0 if self.scan_side == 'left' else 1
                     elif self.card_type == CardType.QUARTER:
-                        position_map = {"top_left": 0, "top_right": 1, "bottom_left": 2, "bottom_right": 3}
+                        position_map = {"bottom_left": 0, "top_left": 1, "top_right": 2, "bottom_right": 3}
                         expected_position = position_map.get(self.scan_side, 0)
                     else:
                         expected_position = 0
@@ -546,8 +547,15 @@ class AppState(QObject):
         self.save_cache()
 
     def set_start_index(self, index):
+        """Set the start card index based on scan direction"""
         if 0 <= index < len(self.expected_cards):
-            self.current_card_index = index
+            # For top-to-bottom: current_card_index = array_index
+            # For bottom-to-top: current_card_index = scan_position (total - 1 - array_index)
+            if self.scan_direction == "bottom_to_top":
+                self.current_card_index = len(self.expected_cards) - 1 - index
+            else:
+                self.current_card_index = index
+            
             self.first_scan_received = True
             self.state_changed.emit()
 
@@ -714,7 +722,7 @@ class AppState(QObject):
         elif self.card_type == CardType.HALF:
             qr_position = 1 if self.scan_side == 'left' else 2
         elif self.card_type == CardType.QUARTER:
-            position_map = {"top_left": 1, "top_right": 2, "bottom_left": 3, "bottom_right": 4}
+            position_map = {"bottom_left": 1, "top_left": 2, "top_right": 3, "bottom_right": 4}
             qr_position = position_map.get(self.scan_side, 1)
         
         expected_qr = self.expected_cards[actual_card_index][qr_position]
