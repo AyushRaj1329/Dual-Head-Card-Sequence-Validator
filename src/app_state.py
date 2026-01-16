@@ -547,7 +547,14 @@ class AppState(QObject):
 
     def set_start_index(self, index):
         if 0 <= index < len(self.expected_cards):
-            self.current_card_index = index
+            # For bottom-to-top, convert array index to scan position
+            if self.scan_direction == "bottom_to_top":
+                # If we found card at array index 75 in a 100-card file,
+                # the scan position should be 24 (100 - 1 - 75)
+                self.current_card_index = len(self.expected_cards) - 1 - index
+            else:
+                # For top-to-bottom, scan position = array index
+                self.current_card_index = index
             self.first_scan_received = True
             self.state_changed.emit()
 
