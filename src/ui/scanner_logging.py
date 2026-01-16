@@ -71,6 +71,12 @@ class ScannerLoggingWindow(QMainWindow):
     def on_log_updated(self, new_entries):
         self.total_log_entries.extend(new_entries)
         self.filtered_log_entries.extend(new_entries) # For now, filtered is all
+        
+        # Automatically jump to the last page to show the latest scanned entries
+        total_items = len(self.filtered_log_entries)
+        total_pages = (total_items + self.items_per_page - 1) // self.items_per_page
+        self.current_page = max(0, total_pages - 1)
+        
         self.update_pagination_controls()
         self.display_current_page()
 
