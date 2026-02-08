@@ -50,7 +50,7 @@ def set_start_index(self, index):
 
 #### 1. Array Index (File Position)
 - How cards are stored in the file
-- Always goes 0 → 99 (for 100 cards)
+- Always goes 0 → 99 (for 100 cards)  
 - Never changes regardless of scan direction
 
 #### 2. Scan Position (Scanning Order)

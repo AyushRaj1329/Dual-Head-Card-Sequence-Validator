@@ -5,6 +5,7 @@ import re
 import json
 import os
 import sys
+import time
 from datetime import datetime
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
@@ -141,6 +142,12 @@ class AppState(QObject):
         self.start_card_code = None
         self.baud_rate, self.data_bits, self.parity, self.stop_bits, self.timeout = 115200, 8, 'N', 1, 1
         self.current_theme = None
+
+        # Auto-save configuration for power loss protection
+        self.last_save_time = time.time()
+        self.scans_since_save = 0
+        self.auto_save_interval = 300  # Save every 5 minutes (300 seconds)
+        self.auto_save_batch_size = 1000  # Save every 1000 scans
 
         # On-demand scanning state machine
         self.is_waiting_for_start_card = False
