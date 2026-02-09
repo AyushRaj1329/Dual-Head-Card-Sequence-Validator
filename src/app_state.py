@@ -1,5 +1,4 @@
 # src/app_state.py
-import serial
 import threading
 import re
 import json
@@ -10,13 +9,13 @@ from datetime import datetime
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 from appdirs import user_data_dir
-import serial.tools.list_ports
 import winreg
 
 from .ui.widgets import ApprovalDialog
 import constants
 from .logic.file_parser import parse_file
-from .services.com_writer import ComPortWriter
+from .services.udp_reader import UDPReader
+from .services.udp_writer import UDPWriter
 from .card_types import CardType
 
 APP_NAME = "CardSequenceValidator"
@@ -38,66 +37,6 @@ def get_windows_theme():
     except Exception:
         return "dark"
 
-class ComPortReader:
-    def __init__(self, port, baudrate=115200, bytesize=8, parity='N', stopbits=1, timeout=0.1, callback=None, error_callback=None):
-        self.port, self.baudrate, self.bytesize = port, baudrate, bytesize
-        self.parity, self.stopbits, self.timeout = parity, stopbits, timeout
-        self.callback, self.error_callback = callback, error_callback
-        self.running, self.thread, self.serial_instance = False, None, None
-        self.paused = threading.Event()
-        self.paused.set()
-
-    def start_reading(self):
-        if self.running: return
-        self.running = True
-        self.thread = threading.Thread(target=self.read_loop)
-        self.thread.daemon = True
-        self.thread.start()
-
-    def stop_reading(self):
-        self.running = False
-        self.resume()
-        if self.thread and self.thread.is_alive():
-            self.thread.join()
-        if self.serial_instance and self.serial_instance.is_open:
-            self.serial_instance.close()
-
-    def pause(self):
-        self.paused.clear()
-
-    def resume(self):
-        if self.serial_instance:
-            self.serial_instance.reset_input_buffer()
-        self.paused.set()
-
-    def read_loop(self):
-        try:
-            self.serial_instance = serial.Serial(
-                port=self.port, baudrate=self.baudrate, bytesize=self.bytesize,
-                parity=self.parity, stopbits=self.stopbits, timeout=self.timeout,
-                inter_byte_timeout=0.05
-            )
-            if self.error_callback:
-                self.error_callback(f"Connected to {self.port}", "green")
-
-            while self.running:
-                self.paused.wait()
-                if not self.running: break
-
-                if self.serial_instance.in_waiting > 0:
-                    raw_data = self.serial_instance.read(256)
-                    decoded_data = raw_data.decode(errors='ignore').strip()
-                    decoded_data = re.sub(r'[^\x20-\x7E]', '', decoded_data)
-                    if decoded_data and self.callback:
-                        self.callback(decoded_data)
-        except serial.SerialException as e:
-            if self.error_callback:
-                self.error_callback(f"Error connecting to {self.port}: {e}", "red")
-        finally:
-            self.running = False
-            if self.error_callback and self.port:
-                self.error_callback("Not Connected", "red")
-
 class AppState(QObject):
     log_updated = pyqtSignal(list)
     log_cleared = pyqtSignal()
@@ -117,11 +56,12 @@ class AppState(QObject):
         self.card_type = card_type
         self.main_port_reader = None
         self.ondemand_port_reader = None
-        self.output_com_writer = ComPortWriter()
+        self.output_udp_writer = UDPWriter()
 
-        self.selected_com_port = None
-        self.selected_output_port = None
-        self.start_card_scan_port = None
+        # UDP Configuration (replaces COM port configuration)
+        self.main_scanner_config = None  # {'local_ip': str, 'local_port': int, 'remote_ip': str, 'remote_port': int}
+        self.ondemand_scanner_config = None
+        self.output_config = None
         
         self.is_scanning = False
         self.output_formats = {}
@@ -140,6 +80,8 @@ class AppState(QObject):
         self.first_scan_received = True
         self.log_data = []
         self.start_card_code = None
+        
+        # Legacy serial settings (kept for backward compatibility, not used with UDP)
         self.baud_rate, self.data_bits, self.parity, self.stop_bits, self.timeout = 115200, 8, 'N', 1, 1
         self.current_theme = None
 
@@ -161,53 +103,67 @@ class AppState(QObject):
         if self.current_theme is None:
             self.current_theme = get_windows_theme()
         
-        # Connect to ports from cache, but do not start scanning automatically
-        available_ports = [port.device for port in serial.tools.list_ports.comports()]
+        # Restore UDP connections from cache
+        if self.ondemand_scanner_config:
+            config = self.ondemand_scanner_config
+            self.connect_ondemand_udp(
+                config.get('local_ip'), config.get('local_port'),
+                config.get('remote_ip'), config.get('remote_port')
+            )
+        
+        if self.output_config:
+            config = self.output_config
+            self.connect_output_udp(
+                config.get('local_ip'), config.get('local_port'),
+                config.get('remote_ip'), config.get('remote_port')
+            )
 
-        if self.selected_com_port and self.selected_com_port not in available_ports:
-            self.selected_com_port = None
-        if self.start_card_scan_port and self.start_card_scan_port not in available_ports:
-            self.start_card_scan_port = None
-        if self.selected_output_port and self.selected_output_port not in available_ports:
-            self.selected_output_port = None
-
-        if self.start_card_scan_port:
-            self.connect_start_card_port(self.start_card_scan_port)
-        if self.selected_output_port:
-            self.connect_output_port(self.selected_output_port)
-
-        # Emit state_changed after all initial port validations and connections
+        # Emit state_changed after all initial configurations
         self.state_changed.emit()
-
         self.theme_changed.emit(self.current_theme)
 
     def load_cache(self):
         try:
             with open(get_cache_file_path(), 'r') as f:
                 cache = json.load(f)
-                self.selected_com_port = cache.get('selected_com_port')
-                self.selected_output_port = cache.get('selected_output_port')
-                self.start_card_scan_port = cache.get('start_card_scan_port')
+                
+                # Load UDP configurations
+                self.main_scanner_config = cache.get('main_scanner_config')
+                self.ondemand_scanner_config = cache.get('ondemand_scanner_config')
+                self.output_config = cache.get('output_config')
+                
+                # Backward compatibility: Handle old serial cache format
+                # If UDP configs don't exist but old serial configs do, initialize as None
+                if not self.main_scanner_config and 'selected_com_port' in cache:
+                    self.main_scanner_config = None
+                if not self.ondemand_scanner_config and 'start_card_scan_port' in cache:
+                    self.ondemand_scanner_config = None
+                if not self.output_config and 'selected_output_port' in cache:
+                    self.output_config = None
+                
+                # Legacy serial settings (kept for backward compatibility)
                 self.baud_rate = cache.get('baud_rate', 115200)
                 self.data_bits = cache.get('data_bits', 8)
                 self.parity = cache.get('parity', 'N')
                 self.stop_bits = cache.get('stop_bits', 1)
                 self.timeout = cache.get('timeout', 1)
+                
                 self.selected_output_format = cache.get('selected_output_format', "")
                 self.current_theme = cache.get('current_theme', "dark")
                 self.start_card_code = cache.get('start_card_code')
                 self.scan_direction = cache.get('scan_direction', 'top_to_bottom')
                 
-                # Load card type from cache (but don't override constructor parameter)
+                # Load card type from cache
                 cached_card_type = cache.get('card_type')
                 if cached_card_type and not hasattr(self, '_card_type_set_by_user'):
                     self.card_type = CardType.from_string(cached_card_type)
                 
+                # Don't auto-load files - just clear the path since file isn't loaded
+                # User must manually load files with card type selection
                 selected_file_path = cache.get('selected_file_path')
                 if selected_file_path:
-                    # Don't auto-load files anymore - require manual selection with card type
-                    # Just store the path for reference
-                    self.selected_file_path = selected_file_path
+                    # Clear the file path since we don't auto-load anymore
+                    self.selected_file_path = ""
                 
                 self.log_data = cache.get('log_data', [])
                 self.log_updated.emit(self.log_data)
@@ -218,9 +174,9 @@ class AppState(QObject):
     def save_cache(self):
         cache_data = {
             'card_type': self.card_type.value,
-            'selected_com_port': self.selected_com_port,
-            'start_card_scan_port': self.start_card_scan_port,
-            'selected_output_port': self.selected_output_port,
+            'main_scanner_config': self.main_scanner_config,
+            'ondemand_scanner_config': self.ondemand_scanner_config,
+            'output_config': self.output_config,
             'baud_rate': self.baud_rate,
             'data_bits': self.data_bits,
             'parity': self.parity,
@@ -246,16 +202,23 @@ class AppState(QObject):
             self.output_formats = {}
 
     def start_scanning(self):
-        if not self.selected_com_port or self.is_scanning: return
-        self.main_port_reader = ComPortReader(
-            port=self.selected_com_port, baudrate=self.baud_rate, bytesize=self.data_bits,
-            parity=self.parity, stopbits=self.stop_bits, timeout=self.timeout,
+        if not self.main_scanner_config or self.is_scanning:
+            return
+        
+        config = self.main_scanner_config
+        self.main_port_reader = UDPReader(
+            local_ip=config['local_ip'],
+            local_port=config['local_port'],
+            remote_ip=config.get('remote_ip'),
+            remote_port=config.get('remote_port'),
             callback=self.handle_main_scan,
             error_callback=lambda msg, color: self.com_status_changed.emit(msg, color)
         )
         self.is_scanning = True
         self.main_port_reader.start_reading()
-        self.com_status_changed.emit(self.selected_com_port, "green")
+        
+        bind_msg = f"Listening on {config['local_ip']}:{config['local_port']}"
+        self.com_status_changed.emit(bind_msg, "green")
         
         # Set start card on first scan if not already set
         if not self.start_card_has_been_scanned:
@@ -395,49 +358,69 @@ class AppState(QObject):
             self.log_updated.emit([log_entry])
         self.state_changed.emit()
 
-    def connect_start_card_port(self, port):
+    def connect_ondemand_udp(self, local_ip, local_port, remote_ip=None, remote_port=None):
+        """Connect on-demand scanner via UDP"""
         if self.ondemand_port_reader:
             self.ondemand_port_reader.stop_reading()
         
-        if not port:
-            self.start_card_scan_port = None
+        if not local_ip or not local_port:
+            self.ondemand_scanner_config = None
             self.ondemand_port_reader = None
             self.ondemand_scan_status_update.emit("Not Connected", "red")
             return
 
-        self.ondemand_port_reader = ComPortReader(
-            port=port, baudrate=self.baud_rate, bytesize=self.data_bits,
-            parity=self.parity, stopbits=self.stop_bits,
+        self.ondemand_port_reader = UDPReader(
+            local_ip=local_ip,
+            local_port=local_port,
+            remote_ip=remote_ip,
+            remote_port=remote_port,
             callback=self.handle_ondemand_scan,
             error_callback=lambda msg, color: self.ondemand_scan_status_update.emit(msg, color)
         )
-        self.start_card_scan_port = port
+        
+        self.ondemand_scanner_config = {
+            'local_ip': local_ip,
+            'local_port': local_port,
+            'remote_ip': remote_ip,
+            'remote_port': remote_port
+        }
+        
         self.ondemand_port_reader.start_reading()
-        self.ondemand_scan_status_update.emit(self.start_card_scan_port, "green")
+        bind_msg = f"Listening on {local_ip}:{local_port}"
+        self.ondemand_scan_status_update.emit(bind_msg, "green")
         self.state_changed.emit()
 
-    def connect_output_port(self, port):
-        if self.output_com_writer.is_connected:
-            self.output_com_writer.disconnect()
+    def connect_output_udp(self, local_ip, local_port, remote_ip, remote_port):
+        """Connect output via UDP"""
+        if self.output_udp_writer.is_connected:
+            self.output_udp_writer.disconnect()
         
-        # Handle empty or None port
-        if not port:
-            self.selected_output_port = None
+        if not remote_ip or not remote_port:
+            self.output_config = None
             self.output_com_status_changed.emit("Not Connected", "red")
             self.state_changed.emit()
             self.save_cache()
             return
         
-        success, message = self.output_com_writer.connect(
-            port=port, baudrate=self.baud_rate, bytesize=self.data_bits,
-            parity=self.parity, stopbits=self.stop_bits, timeout=self.timeout
+        success, message = self.output_udp_writer.connect(
+            local_ip=local_ip or "0.0.0.0",
+            local_port=local_port or 0,
+            remote_ip=remote_ip,
+            remote_port=remote_port
         )
+        
         if success:
-            self.selected_output_port = port
-            self.output_com_status_changed.emit(port, "green")
+            self.output_config = {
+                'local_ip': local_ip,
+                'local_port': local_port,
+                'remote_ip': remote_ip,
+                'remote_port': remote_port
+            }
+            self.output_com_status_changed.emit(message, "green")
         else:
-            self.selected_output_port = None
+            self.output_config = None
             self.output_com_status_changed.emit(message, "red")
+        
         self.state_changed.emit()
         self.save_cache()
 
@@ -447,13 +430,13 @@ class AppState(QObject):
             self.ondemand_port_reader.stop_reading()
             self.ondemand_port_reader = None
             self.ondemand_scan_status_update.emit("Not Connected", "red")
-        if self.output_com_writer.is_connected:
-            self.output_com_writer.disconnect()
+        if self.output_udp_writer.is_connected:
+            self.output_udp_writer.disconnect()
             self.output_com_status_changed.emit("Not Connected", "red")
         
-        self.selected_com_port = None
-        self.start_card_scan_port = None
-        self.selected_output_port = None
+        self.main_scanner_config = None
+        self.ondemand_scanner_config = None
+        self.output_config = None
         self.state_changed.emit()
         self.save_cache()
 
@@ -717,10 +700,11 @@ class AppState(QObject):
             return "Top → Bottom (First card first)"
 
     def send_output_signal(self, status):
-        if not self.output_com_writer.is_connected: return
+        if not self.output_udp_writer.is_connected:
+            return
         output_signal = self.output_formats.get(self.selected_output_format, {}).get(status)
         if output_signal:
-            self.output_com_writer.send(output_signal)
+            self.output_udp_writer.send(output_signal)
 
     def resolve_mismatch(self, scanned_code, approved, future_index):
         thread = threading.Thread(target=self._perform_mismatch_resolution, args=(scanned_code, approved, future_index))

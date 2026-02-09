@@ -6,7 +6,7 @@ from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QRect, QParallelA
 from PyQt6.QtGui import QPixmap, QScreen
 
 from ..app_state import AppState
-from .com_port_setup import ComPortSetupWindow
+from .network_setup import NetworkSetupWindow
 from .file_management import FileManagementWindow
 from .scanner_logging import ScannerLoggingWindow
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
@@ -266,7 +266,7 @@ class HomePage(QMainWindow):
         layout.setSpacing(30)
         cards_data = [
             ("Scanner & Logging", "Live scanner input and validation logging", "Scanner Control", "📱", self.open_scanner),
-            ("COM Port Setup", "Configure input and output serial ports", "Port Configuration", "🔧", self.open_com_port_setup),
+            ("Network Setup", "Configure UDP network connections for input and output", "Network Configuration", "🔧", self.open_com_port_setup),
             ("File Management", "Manage card sequence files and logs", "File & Log Management", "📁", self.open_file_management)
         ]
         for title, desc, btn_text, icon, callback in cards_data:
@@ -358,19 +358,30 @@ class HomePage(QMainWindow):
             self.file_status_label.setText("No File")
             self.file_status_label.setObjectName("statusWarning")
 
-        if self.app_state.selected_com_port:
-            self.com_status_label.setText(self.app_state.selected_com_port)
+        if self.app_state.main_scanner_config:
+            config = self.app_state.main_scanner_config
+            self.com_status_label.setText(f"{config['local_ip']}:{config['local_port']}")
             self.com_status_label.setObjectName("statusOK")
         else:
             self.com_status_label.setText("Not Set")
             self.com_status_label.setObjectName("statusWarning")
 
-        if self.app_state.selected_output_port:
-            self.output_com_status_label.setText(self.app_state.selected_output_port)
+        if self.app_state.output_config:
+            config = self.app_state.output_config
+            self.output_com_status_label.setText(f"{config['remote_ip']}:{config['remote_port']}")
             self.output_com_status_label.setObjectName("statusOK")
         else:
             self.output_com_status_label.setText("Not Set")
             self.output_com_status_label.setObjectName("statusWarning")
+
+        # Update scan card port status
+        if self.app_state.ondemand_scanner_config:
+            config = self.app_state.ondemand_scanner_config
+            self.scan_card_com_status_label.setText(f"{config['local_ip']}:{config['local_port']}")
+            self.scan_card_com_status_label.setObjectName("statusOK")
+        else:
+            self.scan_card_com_status_label.setText("Not Set")
+            self.scan_card_com_status_label.setObjectName("statusWarning")
 
         self.scanner_status_label.style().unpolish(self.scanner_status_label)
         self.scanner_status_label.style().polish(self.scanner_status_label)
@@ -380,34 +391,14 @@ class HomePage(QMainWindow):
         self.com_status_label.style().polish(self.com_status_label)
         self.output_com_status_label.style().unpolish(self.output_com_status_label)
         self.output_com_status_label.style().polish(self.output_com_status_label)
-
-        # Update scan card com status
-        if self.app_state.start_card_scan_port:
-            self.update_scan_card_com_status(self.app_state.start_card_scan_port, "green")
-        else:
-            self.update_scan_card_com_status("Not Set", "orange")
-
-        self.scan_card_com_status_label.style().unpolish(self.scan_card_com_status_label)
-        self.scan_card_com_status_label.style().polish(self.scan_card_com_status_label)
-
-    def update_scan_card_com_status(self, message, color):
-        self.scan_card_com_status_label.setText(message)
-        if color == "green":
-            self.scan_card_com_status_label.setObjectName("statusOK")
-        elif color == "red":
-            self.scan_card_com_status_label.setObjectName("statusError")
-        elif color == "orange":
-            self.scan_card_com_status_label.setObjectName("statusWarning")
-        
         self.scan_card_com_status_label.style().unpolish(self.scan_card_com_status_label)
         self.scan_card_com_status_label.style().polish(self.scan_card_com_status_label)
 
     def update_output_port_status(self, message, color):
         """Update output port status in real-time"""
-        if "Connected to" in message or message.startswith("COM"):
-            # Extract just the port name if it's a connection message
-            port_name = message.replace("Connected to ", "")
-            self.output_com_status_label.setText(port_name)
+        if self.app_state.output_config:
+            config = self.app_state.output_config
+            self.output_com_status_label.setText(f"{config['remote_ip']}:{config['remote_port']}")
             self.output_com_status_label.setObjectName("statusOK")
         elif "Not Connected" in message or "Not Set" in message:
             self.output_com_status_label.setText("Not Set")
@@ -431,7 +422,7 @@ class HomePage(QMainWindow):
 
     def open_com_port_setup(self):
         if self.com_port_window is None:
-            self.com_port_window = ComPortSetupWindow(self.app_state)
+            self.com_port_window = NetworkSetupWindow(self.app_state)
         if self.com_port_window.isMinimized():
             self.com_port_window.showNormal()
         self.com_port_window.showMaximized()

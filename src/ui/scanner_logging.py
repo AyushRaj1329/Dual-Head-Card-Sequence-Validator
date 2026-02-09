@@ -362,7 +362,7 @@ class ScannerLoggingWindow(QMainWindow):
 
     def update_displays(self):
         is_scanning = self.app_state.is_scanning
-        has_port = bool(self.app_state.selected_com_port)
+        has_port = bool(self.app_state.main_scanner_config)
         has_file = bool(self.app_state.expected_cards)
 
         self.start_btn.setEnabled(not is_scanning and has_port and has_file)

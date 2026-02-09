@@ -369,15 +369,11 @@ class FileManagementWindow(QMainWindow):
             f"The first card you scan will be set as the start card.\n"
             f"Scanning will continue {direction_desc.lower()} from that card."
         )
-        
-        # Navigate to scanner logging window
-        if self.open_scanner_callback:
-            self.open_scanner_callback()
 
     def update_ui(self):
         has_file = bool(self.app_state.expected_cards)
         has_logs = bool(self.app_state.log_data)
-        has_start_card_port = bool(self.app_state.start_card_scan_port)
+        has_start_card_port = bool(self.app_state.ondemand_scanner_config)
 
         is_waiting_for_scan = self.app_state.is_waiting_for_start_card or \
                               self.app_state.is_waiting_for_count_card_1 or \
