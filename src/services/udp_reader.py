@@ -74,12 +74,16 @@ class UDPReader:
             self.socket_instance = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.socket_instance.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             
+            # CRITICAL FIX: Bind to specific interface IP (not 0.0.0.0) for multi-NIC systems
+            # This ensures we listen on the correct Ethernet adapter
+            bind_ip = self.local_ip if self.local_ip else "0.0.0.0"
+            
             # Bind to local address
-            self.socket_instance.bind((self.local_ip, self.local_port))
+            self.socket_instance.bind((bind_ip, self.local_port))
             self.socket_instance.settimeout(0.5)  # 500ms timeout for checking running flag
             
             if self.error_callback:
-                bind_msg = f"Listening on {self.local_ip}:{self.local_port}"
+                bind_msg = f"Listening on {bind_ip}:{self.local_port}"
                 if self.remote_ip:
                     bind_msg += f" (from {self.remote_ip}:{self.remote_port or 'any'})"
                 self.error_callback(bind_msg, "green")
@@ -117,7 +121,7 @@ class UDPReader:
                     
         except Exception as e:
             if self.error_callback:
-                self.error_callback(f"Error binding to {self.local_ip}:{self.local_port}: {e}", "red")
+                self.error_callback(f"Error binding to {bind_ip}:{self.local_port}: {e}", "red")
         finally:
             self.running = False
             if self.socket_instance:

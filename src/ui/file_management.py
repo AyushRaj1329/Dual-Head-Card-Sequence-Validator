@@ -373,7 +373,7 @@ class FileManagementWindow(QMainWindow):
     def update_ui(self):
         has_file = bool(self.app_state.expected_cards)
         has_logs = bool(self.app_state.log_data)
-        has_start_card_port = bool(self.app_state.ondemand_scanner_config)
+        has_start_card_port = bool(self.app_state.ondemand_port_reader)
 
         is_waiting_for_scan = self.app_state.is_waiting_for_start_card or \
                               self.app_state.is_waiting_for_count_card_1 or \

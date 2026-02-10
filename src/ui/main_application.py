@@ -266,7 +266,7 @@ class HomePage(QMainWindow):
         layout.setSpacing(30)
         cards_data = [
             ("Scanner & Logging", "Live scanner input and validation logging", "Scanner Control", "📱", self.open_scanner),
-            ("Network Setup", "Configure UDP network connections for input and output", "Network Configuration", "🔧", self.open_com_port_setup),
+            ("Network & COM Setup", "Configure network and serial connections", "Configuration", "🔧", self.open_com_port_setup),
             ("File Management", "Manage card sequence files and logs", "File & Log Management", "📁", self.open_file_management)
         ]
         for title, desc, btn_text, icon, callback in cards_data:

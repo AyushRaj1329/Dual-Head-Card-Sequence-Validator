@@ -37,9 +37,12 @@ class UDPWriter:
             self.socket_instance = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.socket_instance.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             
-            # Bind to local address (0.0.0.0 means any interface)
+            # CRITICAL FIX: Bind to specific interface IP for multi-NIC systems
+            # This ensures we send from the correct Ethernet adapter
             bind_ip = local_ip if local_ip else "0.0.0.0"
             bind_port = int(local_port) if local_port else 0
+            
+            # Bind to specific interface (not 0.0.0.0) for proper routing
             self.socket_instance.bind((bind_ip, bind_port))
             
             # Store connection info
