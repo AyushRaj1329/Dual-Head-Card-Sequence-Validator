@@ -571,9 +571,6 @@ class NetworkSetupWindow(QMainWindow):
         grid.addWidget(self.create_main_scanner_section(), 0, 0)
         grid.addWidget(self.create_output_section(), 0, 1)
         
-        # Row 1: On-Demand Scanner (Serial) spans both columns at bottom
-        grid.addWidget(self.create_ondemand_scanner_section(), 1, 0, 1, 2)
-        
         parent_layout.addLayout(grid)
 
     def create_main_scanner_section(self):
