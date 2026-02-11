@@ -357,13 +357,7 @@ class NetworkSetupWindow(QMainWindow):
             
             if not ondemand_com_port or "No ports" in ondemand_com_port:
                 # Disconnect the on-demand scanner
-                if self.app_state.ondemand_port_reader:
-                    self.app_state.ondemand_port_reader.stop_reading()
-                    self.app_state.ondemand_port_reader = None
-                self.app_state.start_card_scan_port = None
-                self.app_state.ondemand_scan_status_update.emit("Not Connected", "red")
-                self.app_state.state_changed.emit()
-                self.app_state.save_cache()
+                self.app_state.connect_ondemand_serial(port=None)
                 QMessageBox.information(self, "Success", "On-demand scanner disconnected.")
                 return
             
@@ -379,39 +373,16 @@ class NetworkSetupWindow(QMainWindow):
             
             ondemand_timeout = float(self.ondemand_timeout.currentText().strip() or "1")
             
-            # Stop existing reader if any
-            if self.app_state.ondemand_port_reader:
-                self.app_state.ondemand_port_reader.stop_reading()
-            
-            # Import ComPortReader from the app_state module
-            import src.app_state as app_state_module
-            
-            # Create new reader with settings
-            self.app_state.ondemand_port_reader = app_state_module.ComPortReader(
+            # Connect using the new method
+            self.app_state.connect_ondemand_serial(
                 port=ondemand_com_port,
                 baudrate=ondemand_baud_rate,
                 bytesize=ondemand_data_bits,
                 parity=ondemand_parity,
                 stopbits=ondemand_stop_bits,
-                timeout=ondemand_timeout,
-                callback=self.app_state.handle_ondemand_scan,
-                error_callback=lambda msg, color: self.app_state.ondemand_scan_status_update.emit(msg, color)
+                timeout=ondemand_timeout
             )
             
-            # Update app_state attributes
-            self.app_state.start_card_scan_port = ondemand_com_port
-            self.app_state.baud_rate = ondemand_baud_rate
-            self.app_state.data_bits = ondemand_data_bits
-            self.app_state.parity = ondemand_parity
-            self.app_state.stop_bits = ondemand_stop_bits
-            self.app_state.timeout = ondemand_timeout
-            
-            # Start reading
-            self.app_state.ondemand_port_reader.start_reading()
-            self.app_state.ondemand_scan_status_update.emit(f"Connected to {ondemand_com_port}", "green")
-            
-            self.app_state.state_changed.emit()
-            self.app_state.save_cache()
             QMessageBox.information(self, "Success", "On-demand scanner applied.")
             
         except Exception as e:
@@ -570,6 +541,9 @@ class NetworkSetupWindow(QMainWindow):
         # Row 0: Main Scanner (UDP) and Output (UDP) side by side
         grid.addWidget(self.create_main_scanner_section(), 0, 0)
         grid.addWidget(self.create_output_section(), 0, 1)
+        
+        # Row 1: On-Demand Scanner (Serial) spans both columns at bottom
+        grid.addWidget(self.create_ondemand_scanner_section(), 1, 0, 1, 2)
         
         parent_layout.addLayout(grid)
 

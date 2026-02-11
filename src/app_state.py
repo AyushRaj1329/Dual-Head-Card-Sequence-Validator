@@ -1,4 +1,6 @@
 # src/app_state.py
+import serial
+import serial.tools.list_ports
 import threading
 import re
 import json
@@ -36,6 +38,88 @@ def get_windows_theme():
         return "light" if theme_value == 1 else "dark"
     except Exception:
         return "dark"
+
+class ComPortReader:
+    """Serial COM port reader for receiving QR code data from scanners."""
+    def __init__(self, port, baudrate=115200, bytesize=8, parity='N', stopbits=1, timeout=0.1, callback=None, error_callback=None):
+        self.port = port
+        self.baudrate = baudrate
+        self.bytesize = bytesize
+        self.parity = parity
+        self.stopbits = stopbits
+        self.timeout = timeout
+        self.callback = callback
+        self.error_callback = error_callback
+        self.running = False
+        self.thread = None
+        self.serial_instance = None
+        self.paused = threading.Event()
+        self.paused.set()
+
+    def start_reading(self):
+        if self.running:
+            return
+        self.running = True
+        self.thread = threading.Thread(target=self.read_loop, daemon=True)
+        self.thread.start()
+
+    def stop_reading(self):
+        self.running = False
+        self.resume()
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=2)
+        if self.serial_instance and self.serial_instance.is_open:
+            try:
+                self.serial_instance.close()
+            except:
+                pass
+
+    def pause(self):
+        self.paused.clear()
+
+    def resume(self):
+        if self.serial_instance:
+            try:
+                self.serial_instance.reset_input_buffer()
+            except:
+                pass
+        self.paused.set()
+
+    def read_loop(self):
+        try:
+            self.serial_instance = serial.Serial(
+                port=self.port,
+                baudrate=self.baudrate,
+                bytesize=self.bytesize,
+                parity=self.parity,
+                stopbits=self.stopbits,
+                timeout=self.timeout,
+                inter_byte_timeout=0.05
+            )
+            if self.error_callback:
+                self.error_callback(f"Connected to {self.port}", "green")
+
+            while self.running:
+                self.paused.wait()
+                if not self.running:
+                    break
+
+                if self.serial_instance.in_waiting > 0:
+                    raw_data = self.serial_instance.read(256)
+                    decoded_data = raw_data.decode(errors='ignore').strip()
+                    decoded_data = re.sub(r'[^\x20-\x7E]', '', decoded_data)
+                    if decoded_data and self.callback:
+                        self.callback(decoded_data)
+        except serial.SerialException as e:
+            if self.error_callback:
+                self.error_callback(f"Error connecting to {self.port}: {e}", "red")
+        except Exception as e:
+            if self.error_callback:
+                self.error_callback(f"Unexpected error: {e}", "red")
+        finally:
+            self.running = False
+            if self.error_callback and self.port:
+                self.error_callback("Not Connected", "red")
 
 class AppState(QObject):
     log_updated = pyqtSignal(list)
@@ -384,6 +468,48 @@ class AppState(QObject):
             'remote_ip': remote_ip,
             'remote_port': remote_port
         }
+        
+        self.ondemand_port_reader.start_reading()
+        self.ondemand_scan_status_update.emit(f"Connected to {local_ip}:{local_port}", "green")
+        self.state_changed.emit()
+        self.save_cache()
+
+    def connect_ondemand_serial(self, port, baudrate=115200, bytesize=8, parity='N', stopbits=1, timeout=1):
+        """Connect on-demand scanner via serial COM port"""
+        if self.ondemand_port_reader:
+            self.ondemand_port_reader.stop_reading()
+        
+        if not port:
+            self.start_card_scan_port = None
+            self.ondemand_port_reader = None
+            self.ondemand_scan_status_update.emit("Not Connected", "red")
+            self.state_changed.emit()
+            self.save_cache()
+            return
+
+        # Update app_state attributes with the new settings
+        self.baud_rate = baudrate
+        self.data_bits = bytesize
+        self.parity = parity
+        self.stop_bits = stopbits
+        self.timeout = timeout
+
+        self.ondemand_port_reader = ComPortReader(
+            port=port,
+            baudrate=baudrate,
+            bytesize=bytesize,
+            parity=parity,
+            stopbits=stopbits,
+            timeout=timeout,
+            callback=self.handle_ondemand_scan,
+            error_callback=lambda msg, color: self.ondemand_scan_status_update.emit(msg, color)
+        )
+        
+        self.start_card_scan_port = port
+        self.ondemand_port_reader.start_reading()
+        self.ondemand_scan_status_update.emit(f"Connected to {port}", "green")
+        self.state_changed.emit()
+        self.save_cache()
         
         self.ondemand_port_reader.start_reading()
         bind_msg = f"Listening on {local_ip}:{local_port}"
