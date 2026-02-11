@@ -103,41 +103,77 @@ class ComPortSetupWindow(QMainWindow):
         
         self.update_ui_from_state()
 
-    def apply_configuration(self):
+    def apply_input_configuration(self):
+        """Apply input port configuration"""
         input_port = self.input_port_combo.currentText()
-        output_port = self.output_port_combo.currentText()
         start_card_port = self.start_card_input_port_combo.currentText()
+        output_port = self.output_port_combo.currentText()
 
-        ports = [p for p in [input_port, output_port, start_card_port] if p and "No ports" not in p]
+        # Check for duplicate ports
+        ports = [p for p in [input_port, start_card_port] if p and "No ports" not in p]
+        if output_port and "No ports" not in output_port:
+            ports.append(output_port)
+        
         if len(ports) != len(set(ports)):
-            QMessageBox.warning(self, "Configuration Error", "Each COM port (Input, Output, Start Card) must be unique.")
+            QMessageBox.warning(self, "Configuration Error", "Each port must be unique.")
             return
 
+        # Apply main scanner port
+        main_port_to_set = input_port if "No ports" not in input_port and input_port else None
+        if self.app_state.selected_com_port != main_port_to_set:
+            self.app_state.stop_scanning()
+            self.app_state.selected_com_port = main_port_to_set
+
+        # Apply on-demand port
+        ondemand_port_to_set = start_card_port if "No ports" not in start_card_port and start_card_port else None
+        self.app_state.connect_start_card_port(ondemand_port_to_set)
+
+        self.app_state.state_changed.emit()
+        self.app_state.save_cache()
+        QMessageBox.information(self, "Success", "Input ports applied.")
+
+    def apply_output_configuration(self):
+        """Apply output port configuration"""
+        output_port = self.output_port_combo.currentText()
+        input_port = self.input_port_combo.currentText()
+        start_card_port = self.start_card_input_port_combo.currentText()
+
+        # Check for duplicate ports
+        ports = [p for p in [input_port, start_card_port] if p and "No ports" not in p]
+        if output_port and "No ports" not in output_port:
+            if output_port in ports:
+                QMessageBox.warning(self, "Configuration Error", "Output port must be unique.")
+                return
+
+        # Apply output port
+        output_port_to_set = output_port if "No ports" not in output_port and output_port else None
+        if self.app_state.selected_output_port != output_port_to_set:
+            self.app_state.connect_output_port(output_port_to_set)
+        
+        # Apply output format
+        self.app_state.selected_output_format = self.output_format_combo.currentText()
+        
+        self.app_state.state_changed.emit()
+        self.app_state.save_cache()
+        QMessageBox.information(self, "Success", "Output port applied.")
+
+    def apply_serial_settings(self):
+        """Apply serial settings configuration"""
         self.app_state.baud_rate = int(self.baud_rate_combo.currentText())
         self.app_state.data_bits = int(self.data_bits_combo.currentText())
         self.app_state.parity = {'None': 'N', 'Even': 'E', 'Odd': 'O'}[self.parity_combo.currentText()]
         self.app_state.stop_bits = float(self.stop_bits_combo.currentText())
         self.app_state.timeout = float(self.timeout_combo.currentText())
 
-        # Disconnect and reconnect main scanning port if changed
-        main_port_to_set = input_port if "No ports" not in input_port and input_port else None
-        if self.app_state.selected_com_port != main_port_to_set:
-            self.app_state.stop_scanning()
-            self.app_state.selected_com_port = main_port_to_set
-
-        # Connect/disconnect on-demand port
-        ondemand_port_to_set = start_card_port if "No ports" not in start_card_port and start_card_port else None
-        self.app_state.connect_start_card_port(ondemand_port_to_set)
-
-        # Connect/disconnect output port
-        output_port_to_set = output_port if "No ports" not in output_port and output_port else None
-        if self.app_state.selected_output_port != output_port_to_set:
-            self.app_state.connect_output_port(output_port_to_set)
-        
-        self.app_state.selected_output_format = self.output_format_combo.currentText()
         self.app_state.state_changed.emit()
         self.app_state.save_cache()
-        QMessageBox.information(self, "Success", "Configuration has been applied.")
+        QMessageBox.information(self, "Success", "Serial settings applied.")
+
+    def apply_configuration(self):
+        """Legacy method - applies all configurations at once"""
+        self.apply_input_configuration()
+        self.apply_output_configuration()
+        self.apply_serial_settings()
 
     def update_ui_from_state(self):
         for combo in [self.input_port_combo, self.output_port_combo, self.start_card_input_port_combo]:
@@ -194,7 +230,7 @@ class ComPortSetupWindow(QMainWindow):
     def create_header(self, parent_layout):
         title = QLabel("Serial Port Configuration")
         title.setObjectName("h1")
-        subtitle = QLabel("Manage serial port connections for data input and output.")
+        subtitle = QLabel("Configure serial connections for scanners and output.")
         subtitle.setObjectName("subtitle")
         
         title_layout = QVBoxLayout()
@@ -211,7 +247,7 @@ class ComPortSetupWindow(QMainWindow):
 
     def create_com_port_sections(self, parent_layout):
         layout = QGridLayout()
-        layout.setSpacing(25)
+        layout.setSpacing(20)
         layout.addWidget(self.create_input_com_section(), 0, 0)
         layout.addWidget(self.create_output_com_section(), 0, 1)
         parent_layout.addLayout(layout)
@@ -220,24 +256,32 @@ class ComPortSetupWindow(QMainWindow):
         section = QFrame()
         section.setObjectName("panel")
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(25, 20, 25, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(20, 15, 20, 15)
+        layout.setSpacing(12)
         
-        title = QLabel("Input Port Settings")
+        title = QLabel("Input Ports")
         title.setObjectName("h2")
         layout.addWidget(title)
 
-        layout.addWidget(QLabel("Main Scanner Port (Sequence Validation):"))
+        # Main Scanner
+        layout.addWidget(QLabel("Main Scanner:"))
         self.input_port_combo = QComboBox()
         self.input_status_text = QLabel()
         layout.addWidget(self.input_port_combo)
         layout.addWidget(self.input_status_text)
 
-        layout.addWidget(QLabel("On-Demand Scanner Port (Start Card/Counting):"))
+        # On-Demand Scanner
+        layout.addWidget(QLabel("On-Demand Scanner:"))
         self.start_card_input_port_combo = QComboBox()
         self.start_card_input_status_text = QLabel()
         layout.addWidget(self.start_card_input_port_combo)
         layout.addWidget(self.start_card_input_status_text)
+
+        # Apply button for input section
+        apply_input_btn = QPushButton("Apply Input Ports")
+        apply_input_btn.setObjectName("primary")
+        apply_input_btn.clicked.connect(self.apply_input_configuration)
+        layout.addWidget(apply_input_btn)
 
         layout.addStretch()
         return section
@@ -246,20 +290,30 @@ class ComPortSetupWindow(QMainWindow):
         section = QFrame()
         section.setObjectName("panel")
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(25, 20, 25, 20)
-        layout.setSpacing(15)
-        title = QLabel("Output Port Settings")
-        title.setObjectName("h2")
-        self.output_port_combo = QComboBox()
-        self.output_format_combo = QComboBox()
-        self.output_status_text = QLabel()
+        layout.setContentsMargins(20, 15, 20, 15)
+        layout.setSpacing(12)
         
+        title = QLabel("Output Port")
+        title.setObjectName("h2")
         layout.addWidget(title)
-        layout.addWidget(QLabel("Output COM Port:"))
+        
+        layout.addWidget(QLabel("Output Port:"))
+        self.output_port_combo = QComboBox()
         layout.addWidget(self.output_port_combo)
-        layout.addWidget(QLabel("Data Output Format:"))
+        
+        layout.addWidget(QLabel("Format:"))
+        self.output_format_combo = QComboBox()
         layout.addWidget(self.output_format_combo)
+        
+        self.output_status_text = QLabel()
         layout.addWidget(self.output_status_text)
+        
+        # Apply button for output section
+        apply_output_btn = QPushButton("Apply Output Port")
+        apply_output_btn.setObjectName("primary")
+        apply_output_btn.clicked.connect(self.apply_output_configuration)
+        layout.addWidget(apply_output_btn)
+        
         layout.addStretch()
         return section
 
@@ -267,11 +321,15 @@ class ComPortSetupWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("panel")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(25, 20, 25, 20)
-        title = QLabel("Advanced Serial Settings")
+        layout.setContentsMargins(20, 15, 20, 15)
+        layout.setSpacing(12)
+        
+        title = QLabel("Serial Settings")
         title.setObjectName("h2")
+        layout.addWidget(title)
+        
         grid_layout = QGridLayout()
-        grid_layout.setSpacing(20)
+        grid_layout.setSpacing(15)
         
         self.baud_rate_combo = QComboBox()
         self.data_bits_combo = QComboBox()
@@ -280,8 +338,11 @@ class ComPortSetupWindow(QMainWindow):
         self.timeout_combo = QComboBox()
 
         widgets = [
-            ("Baud Rate", self.baud_rate_combo), ("Data Bits", self.data_bits_combo),
-            ("Parity", self.parity_combo), ("Stop Bits", self.stop_bits_combo), ("Timeout (s)", self.timeout_combo)
+            ("Baud Rate", self.baud_rate_combo), 
+            ("Data Bits", self.data_bits_combo),
+            ("Parity", self.parity_combo), 
+            ("Stop Bits", self.stop_bits_combo), 
+            ("Timeout (s)", self.timeout_combo)
         ]
 
         row, col = 0, 0
@@ -297,24 +358,28 @@ class ComPortSetupWindow(QMainWindow):
                 col = 0
                 row += 1
         
-        layout.addWidget(title)
         layout.addLayout(grid_layout)
+        
+        # Apply button for serial settings
+        apply_settings_btn = QPushButton("Apply Serial Settings")
+        apply_settings_btn.setObjectName("primary")
+        apply_settings_btn.clicked.connect(self.apply_serial_settings)
+        layout.addWidget(apply_settings_btn)
+        
         parent_layout.addWidget(frame)
 
     def create_action_buttons(self, parent_layout):
         layout = QHBoxLayout()
         layout.setSpacing(15)
-        apply_btn = QPushButton("Apply Configuration")
-        apply_btn.setObjectName("primary")
-        apply_btn.clicked.connect(self.apply_configuration)
-        disconnect_btn = QPushButton("Disconnect All Ports")
+        
+        disconnect_btn = QPushButton("Disconnect All")
         disconnect_btn.setObjectName("secondary")
         disconnect_btn.clicked.connect(self.app_state.disconnect_all_ports)
+        
         refresh_btn = QPushButton("Refresh Ports")
         refresh_btn.setObjectName("secondary")
         refresh_btn.clicked.connect(self.refresh_ports)
         
-        layout.addWidget(apply_btn)
         layout.addWidget(disconnect_btn)
         layout.addWidget(refresh_btn)
         layout.addStretch()
@@ -324,14 +389,18 @@ class ComPortSetupWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("panel")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(25, 20, 25, 20)
+        layout.setContentsMargins(20, 15, 20, 15)
+        layout.setSpacing(12)
+        
         title = QLabel("Connection Log")
         title.setObjectName("h2")
+        layout.addWidget(title)
+        
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMinimumHeight(150)
-        layout.addWidget(title)
+        self.log_text.setMinimumHeight(120)
         layout.addWidget(self.log_text)
+        
         parent_layout.addWidget(frame)
 
     def populate_settings_dropdowns(self):
