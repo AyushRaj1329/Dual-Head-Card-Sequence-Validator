@@ -28,6 +28,42 @@ def get_cache_file_path():
     os.makedirs(cache_dir, exist_ok=True)
     return os.path.join(cache_dir, "app_cache.json")
 
+def atomic_write_cache(cache_file_path, cache_data):
+    """Write cache atomically to prevent corruption on power loss.
+    
+    Uses temp file + rename pattern to ensure either old or new data exists,
+    never partial/corrupted data.
+    """
+    temp_file_path = cache_file_path + ".tmp"
+    try:
+        # Write to temporary file
+        with open(temp_file_path, 'w') as f:
+            json.dump(cache_data, f, indent=4)
+            f.flush()  # Flush Python buffer to OS
+            os.fsync(f.fileno())  # Force OS to write to physical disk
+        
+        # Atomic rename (replaces old file with new one)
+        # On Windows, this removes the old file and renames temp to final name
+        if os.path.exists(cache_file_path):
+            os.replace(temp_file_path, cache_file_path)
+        else:
+            os.rename(temp_file_path, cache_file_path)
+        
+        # Sync the directory to ensure rename is persisted
+        dir_fd = os.open(os.path.dirname(cache_file_path), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except Exception as e:
+        # Clean up temp file if it exists
+        try:
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+        except:
+            pass
+        raise e
+
 def get_windows_theme():
     if sys.platform == 'win32' and sys.getwindowsversion().major < 10:
         return "light"
@@ -273,8 +309,11 @@ class AppState(QObject):
             'log_data': self.log_data,
             'current_theme': self.current_theme
         }
-        with open(get_cache_file_path(), 'w') as f:
-            json.dump(cache_data, f, indent=4)
+        cache_file_path = get_cache_file_path()
+        try:
+            atomic_write_cache(cache_file_path, cache_data)
+        except Exception as e:
+            print(f"Warning: Failed to save cache: {e}")
 
     def load_output_formats(self):
         try:
@@ -823,9 +862,18 @@ class AppState(QObject):
     def send_output_signal(self, status):
         if not self.output_udp_writer.is_connected:
             return
-        output_signal = self.output_formats.get(self.selected_output_format, {}).get(status)
+        
+        # Get card type key for output format lookup
+        card_type_key = self.card_type.value  # "single", "half", or "quarter"
+        
+        # Get the format for this card type and status
+        format_config = self.output_formats.get(self.selected_output_format, {})
+        card_type_config = format_config.get(card_type_key, {})
+        output_signal = card_type_config.get(status)
+        
         if output_signal:
-            self.output_udp_writer.send(output_signal)
+            # Always send as binary integer
+            self.output_udp_writer.send(output_signal, as_binary_int=True)
 
     def resolve_mismatch(self, scanned_code, approved, future_index):
         thread = threading.Thread(target=self._perform_mismatch_resolution, args=(scanned_code, approved, future_index))

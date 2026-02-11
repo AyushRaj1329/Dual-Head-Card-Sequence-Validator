@@ -69,12 +69,13 @@ class UDPWriter:
             self.socket_instance = None
         self.is_connected = False
 
-    def send(self, message):
+    def send(self, message, as_binary_int=False):
         """
         Send a message via UDP
         
         Args:
-            message: String message to send
+            message: String message to send (or integer if as_binary_int=True)
+            as_binary_int: If True, send as single byte binary integer (0-255)
         
         Returns:
             (success: bool, message: str)
@@ -83,9 +84,18 @@ class UDPWriter:
             return False, "UDP output is not configured."
         
         try:
-            # Send UDP packet
-            data = message.encode('utf-8')
-            self.socket_instance.sendto(data, (self.remote_ip, self.remote_port))
-            return True, f"Sent to {self.remote_ip}:{self.remote_port}: {message.strip()}"
+            if as_binary_int:
+                # Send as single byte binary integer
+                int_value = int(message.strip())
+                if int_value < 0 or int_value > 255:
+                    return False, f"Binary integer must be 0-255, got {int_value}"
+                data = bytes([int_value])
+                self.socket_instance.sendto(data, (self.remote_ip, self.remote_port))
+                return True, f"Sent to {self.remote_ip}:{self.remote_port}: {int_value} (binary)"
+            else:
+                # Send as UTF-8 string
+                data = message.encode('utf-8')
+                self.socket_instance.sendto(data, (self.remote_ip, self.remote_port))
+                return True, f"Sent to {self.remote_ip}:{self.remote_port}: {message.strip()}"
         except Exception as e:
             return False, f"Error sending UDP data: {e}"

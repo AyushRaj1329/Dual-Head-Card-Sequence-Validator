@@ -1,20 +1,19 @@
 {
-  "Standard (OK/NOT OK)": {
-    "OK": "OK\r\n",
-    "NOT OK": "NOT OK\r\n",
-    "SKIPPED": "SKIPPED\r\n",
-    "OK (JUMPED)": "OK\r\n"
-  },
-  "Numeric (1/0)": {
-    "OK": "1\r\n",
-    "NOT OK": "0\r\n",
-    "SKIPPED": "2\r\n",
-    "OK (JUMPED)": "1\r\n"
-  },
-  "PLC Signals": {
-    "OK": "SIG_A_HIGH\r\n",
-    "NOT OK": "SIG_B_HIGH\r\n",
-    "SKIPPED": "SIG_C_HIGH\r\n",
-    "OK (JUMPED)": "SIG_A_HIGH\r\n"
+  "Integers": {
+    "single": {
+      "OK": "17",
+      "NOT OK": "18",
+      "OK (JUMPED)": "17"
+    },
+    "half": {
+      "OK": "9",
+      "NOT OK": "10",
+      "OK (JUMPED)": "10"
+    },
+    "quarter": {
+      "OK": "5",
+      "NOT OK": "6",
+      "OK (JUMPED)": "5"
+    }
   }
 }
