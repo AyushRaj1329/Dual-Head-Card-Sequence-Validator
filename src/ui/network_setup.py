@@ -383,11 +383,11 @@ class NetworkSetupWindow(QMainWindow):
             if self.app_state.ondemand_port_reader:
                 self.app_state.ondemand_port_reader.stop_reading()
             
-            # Import ComPortReader from app_state module
-            from src.app_state import ComPortReader
+            # Import ComPortReader from the app_state module
+            import src.app_state as app_state_module
             
             # Create new reader with settings
-            self.app_state.ondemand_port_reader = ComPortReader(
+            self.app_state.ondemand_port_reader = app_state_module.ComPortReader(
                 port=ondemand_com_port,
                 baudrate=ondemand_baud_rate,
                 bytesize=ondemand_data_bits,
