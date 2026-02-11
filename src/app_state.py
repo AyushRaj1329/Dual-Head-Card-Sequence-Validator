@@ -510,11 +510,6 @@ class AppState(QObject):
         self.ondemand_scan_status_update.emit(f"Connected to {port}", "green")
         self.state_changed.emit()
         self.save_cache()
-        
-        self.ondemand_port_reader.start_reading()
-        bind_msg = f"Listening on {local_ip}:{local_port}"
-        self.ondemand_scan_status_update.emit(bind_msg, "green")
-        self.state_changed.emit()
 
     def connect_output_udp(self, local_ip, local_port, remote_ip, remote_port):
         """Connect output via UDP"""
