@@ -354,6 +354,20 @@ class NetworkSetupWindow(QMainWindow):
         """Apply on-demand scanner serial configuration"""
         try:
             ondemand_com_port = self.ondemand_com_port.currentText().strip()
+            
+            if not ondemand_com_port or "No ports" in ondemand_com_port:
+                # Disconnect the on-demand scanner
+                if self.app_state.ondemand_port_reader:
+                    self.app_state.ondemand_port_reader.stop_reading()
+                    self.app_state.ondemand_port_reader = None
+                self.app_state.start_card_scan_port = None
+                self.app_state.ondemand_scan_status_update.emit("Not Connected", "red")
+                self.app_state.state_changed.emit()
+                self.app_state.save_cache()
+                QMessageBox.information(self, "Success", "On-demand scanner disconnected.")
+                return
+            
+            # Get serial settings
             ondemand_baud_rate = int(self.ondemand_baud_rate.currentText())
             ondemand_data_bits = int(self.ondemand_data_bits.currentText())
             
@@ -365,24 +379,41 @@ class NetworkSetupWindow(QMainWindow):
             
             ondemand_timeout = float(self.ondemand_timeout.currentText().strip() or "1")
             
-            if ondemand_com_port and "No ports" not in ondemand_com_port:
-                self.app_state.connect_start_card_port(
-                    port=ondemand_com_port,
-                    baudrate=ondemand_baud_rate,
-                    bytesize=ondemand_data_bits,
-                    parity=ondemand_parity,
-                    stopbits=ondemand_stop_bits,
-                    timeout=ondemand_timeout
-                )
-            else:
-                self.app_state.connect_start_card_port(port=None)
+            # Stop existing reader if any
+            if self.app_state.ondemand_port_reader:
+                self.app_state.ondemand_port_reader.stop_reading()
+            
+            # Import ComPortReader from app_state module
+            from src.app_state import ComPortReader
+            
+            # Create new reader with settings
+            self.app_state.ondemand_port_reader = ComPortReader(
+                port=ondemand_com_port,
+                baudrate=ondemand_baud_rate,
+                bytesize=ondemand_data_bits,
+                parity=ondemand_parity,
+                stopbits=ondemand_stop_bits,
+                timeout=ondemand_timeout,
+                callback=self.app_state.handle_ondemand_scan,
+                error_callback=lambda msg, color: self.app_state.ondemand_scan_status_update.emit(msg, color)
+            )
+            
+            # Update app_state attributes
+            self.app_state.start_card_scan_port = ondemand_com_port
+            self.app_state.baud_rate = ondemand_baud_rate
+            self.app_state.data_bits = ondemand_data_bits
+            self.app_state.parity = ondemand_parity
+            self.app_state.stop_bits = ondemand_stop_bits
+            self.app_state.timeout = ondemand_timeout
+            
+            # Start reading
+            self.app_state.ondemand_port_reader.start_reading()
+            self.app_state.ondemand_scan_status_update.emit(f"Connected to {ondemand_com_port}", "green")
             
             self.app_state.state_changed.emit()
             self.app_state.save_cache()
             QMessageBox.information(self, "Success", "On-demand scanner applied.")
-        except AttributeError as e:
-            import traceback
-            QMessageBox.critical(self, "Error", f"AttributeError: {e}\n\nTraceback:\n{traceback.format_exc()}")
+            
         except Exception as e:
             import traceback
             QMessageBox.critical(self, "Error", f"Failed to apply: {e}\n\nTraceback:\n{traceback.format_exc()}")
