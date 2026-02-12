@@ -534,9 +534,11 @@ class NetworkSetupWindow(QMainWindow):
         parent_layout.addLayout(header_layout)
 
     def create_network_sections(self, parent_layout):
-        # Create a grid layout for side-by-side sections
+        # Create a grid layout for side-by-side sections with equal column widths
         grid = QGridLayout()
         grid.setSpacing(15)
+        grid.setColumnStretch(0, 1)  # Equal stretch for both columns
+        grid.setColumnStretch(1, 1)
         
         # Row 0: Main Scanner (UDP) and Output (UDP) side by side
         grid.addWidget(self.create_main_scanner_section(), 0, 0)
@@ -550,43 +552,55 @@ class NetworkSetupWindow(QMainWindow):
     def create_main_scanner_section(self):
         section = QFrame()
         section.setObjectName("panel")
-        section.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        section.setMaximumWidth(500)
+        section.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(20, 15, 20, 15)
-        layout.setSpacing(10)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
         
+        # Header
         title = QLabel("Main Scanner Input (UDP)")
         title.setObjectName("h2")
         layout.addWidget(title)
         
-        desc = QLabel("Listen for QR codes from main scanner:")
+        desc = QLabel("Receive QR codes from main scanner via UDP network connection")
         desc.setWordWrap(True)
+        desc.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 8px;")
         layout.addWidget(desc)
         
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        grid.setColumnStretch(1, 1)
+        # Separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setStyleSheet("background-color: #444; max-height: 1px;")
+        layout.addWidget(separator)
         
-        # Local IP (dropdown with available network interfaces)
-        grid.addWidget(QLabel("Local IP:"), 0, 0)
+        # Form grid
+        form = QGridLayout()
+        form.setSpacing(12)
+        form.setColumnMinimumWidth(0, 100)
+        form.setColumnStretch(1, 1)
+        
+        # Local IP
+        local_ip_label = QLabel("Local IP:")
+        local_ip_label.setStyleSheet("font-weight: 500;")
+        form.addWidget(local_ip_label, 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
+        local_ip_container = QHBoxLayout()
+        local_ip_container.setSpacing(6)
         self.main_local_ip = QComboBox()
         self.main_local_ip.setEditable(True)
-        self.main_local_ip.setMaximumWidth(250)
-        grid.addWidget(self.main_local_ip, 0, 1)
+        self.main_local_ip.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        local_ip_container.addWidget(self.main_local_ip)
         
-        # Refresh button for local IPs
-        refresh_main_ip_btn = QPushButton("🔄")
-        refresh_main_ip_btn.setMaximumWidth(35)
-        refresh_main_ip_btn.setFixedHeight(28)
+        refresh_main_ip_btn = QPushButton("↻")
+        refresh_main_ip_btn.setFixedSize(32, 32)
         refresh_main_ip_btn.setToolTip("Refresh network interfaces")
         refresh_main_ip_btn.setStyleSheet("""
             QPushButton {
-                font-size: 14px;
+                font-size: 16px;
+                font-weight: bold;
                 border: 1px solid #555;
                 border-radius: 4px;
                 background-color: #2d2d2d;
-                padding: 2px;
             }
             QPushButton:hover {
                 background-color: #3d3d3d;
@@ -597,89 +611,139 @@ class NetworkSetupWindow(QMainWindow):
             }
         """)
         refresh_main_ip_btn.clicked.connect(lambda: self.populate_local_ip_dropdown(self.main_local_ip))
-        grid.addWidget(refresh_main_ip_btn, 0, 2)
+        local_ip_container.addWidget(refresh_main_ip_btn)
+        form.addLayout(local_ip_container, 0, 1)
         
         # Local Port
-        grid.addWidget(QLabel("Local Port:"), 1, 0)
+        local_port_label = QLabel("Local Port:")
+        local_port_label.setStyleSheet("font-weight: 500;")
+        form.addWidget(local_port_label, 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
         self.main_local_port = QComboBox()
         self.main_local_port.setEditable(True)
         self.main_local_port.addItems(["5000", "5001", "5002", "5003", "5004", "5005", "6000", "7000", "8000", "9000"])
         self.main_local_port.setCurrentText("5000")
-        self.main_local_port.setMaximumWidth(250)
-        grid.addWidget(self.main_local_port, 1, 1, 1, 2)
+        self.main_local_port.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        form.addWidget(self.main_local_port, 1, 1)
         
-        # Remote IP and Port (optional filter)
-        grid.addWidget(QLabel("Remote IP:"), 2, 0)
+        # Remote IP
+        remote_ip_label = QLabel("Remote IP:")
+        remote_ip_label.setStyleSheet("font-weight: 500;")
+        form.addWidget(remote_ip_label, 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
         self.main_remote_ip = QComboBox()
         self.main_remote_ip.setEditable(True)
-        self.main_remote_ip.setPlaceholderText("Optional")
-        self.main_remote_ip.setMaximumWidth(250)
+        self.main_remote_ip.setPlaceholderText("Optional - Scanner IP address")
+        self.main_remote_ip.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.main_remote_ip.addItem("")
         self.main_remote_ip.showPopup = lambda: self._show_popup_with_refresh(self.main_remote_ip)
-        grid.addWidget(self.main_remote_ip, 2, 1, 1, 2)
+        form.addWidget(self.main_remote_ip, 2, 1)
         
-        grid.addWidget(QLabel("Remote Port:"), 3, 0)
+        # Remote Port
+        remote_port_label = QLabel("Remote Port:")
+        remote_port_label.setStyleSheet("font-weight: 500;")
+        form.addWidget(remote_port_label, 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
         self.main_remote_port = QComboBox()
         self.main_remote_port.setEditable(True)
+        self.main_remote_port.setPlaceholderText("Optional")
         self.main_remote_port.addItems(["", "5001", "5002", "5003", "5004", "5005", "6000", "7000", "8000", "9000"])
         self.main_remote_port.setCurrentText("")
-        self.main_remote_port.setMaximumWidth(250)
-        grid.addWidget(self.main_remote_port, 3, 1, 1, 2)
+        self.main_remote_port.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        form.addWidget(self.main_remote_port, 3, 1)
         
-        layout.addLayout(grid)
+        # Add empty row to match Output section height (which has Format field)
+        spacer_label = QLabel("")
+        spacer_label.setFixedHeight(32)  # Match combobox height
+        form.addWidget(spacer_label, 4, 0)
         
+        layout.addLayout(form)
+        
+        # Status
+        status_container = QHBoxLayout()
+        status_container.setSpacing(8)
+        status_label = QLabel("Status:")
+        status_label.setStyleSheet("font-weight: 500;")
         self.main_status_text = QLabel("Not Connected")
         self.main_status_text.setObjectName("statusError")
-        layout.addWidget(self.main_status_text)
+        status_container.addWidget(status_label)
+        status_container.addWidget(self.main_status_text)
+        status_container.addStretch()
+        layout.addLayout(status_container)
         
-        # Apply button for main scanner section
-        apply_main_btn = QPushButton("Apply Main Scanner")
+        # Apply button
+        button_container = QHBoxLayout()
+        button_container.addStretch()
+        apply_main_btn = QPushButton("Apply Configuration")
         apply_main_btn.setObjectName("primary")
+        apply_main_btn.setMinimumWidth(180)
+        apply_main_btn.setFixedHeight(36)
         apply_main_btn.clicked.connect(self.apply_main_scanner_configuration)
-        layout.addWidget(apply_main_btn)
+        button_container.addWidget(apply_main_btn)
+        layout.addLayout(button_container)
         
         return section
 
     def create_ondemand_scanner_section(self):
         section = QFrame()
         section.setObjectName("panel")
-        section.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        section.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(20, 15, 20, 15)
-        layout.setSpacing(10)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
         
+        # Header
+        header_layout = QHBoxLayout()
         title = QLabel("On-Demand Scanner Input (Serial)")
         title.setObjectName("h2")
-        layout.addWidget(title)
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
         
-        desc = QLabel("Serial COM port for on-demand scans:")
+        desc = QLabel("Serial COM port for on-demand manual scans")
         desc.setWordWrap(True)
+        desc.setStyleSheet("color: #888; font-size: 12px;")
         layout.addWidget(desc)
         
-        grid = QGridLayout()
-        grid.setSpacing(8)
+        # Add separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setStyleSheet("background-color: #444; max-height: 1px;")
+        layout.addWidget(separator)
         
-        # COM Port Selection
-        grid.addWidget(QLabel("COM Port:"), 0, 0)
+        # Grid with consistent spacing
+        grid = QGridLayout()
+        grid.setSpacing(12)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(4, 1)
+        grid.setColumnMinimumWidth(0, 90)
+        grid.setColumnMinimumWidth(3, 90)
+        
+        # Row 0: COM Port and Baud Rate
+        com_port_label = QLabel("COM Port:")
+        com_port_label.setStyleSheet("font-weight: 500;")
+        grid.addWidget(com_port_label, 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
+        com_port_layout = QHBoxLayout()
+        com_port_layout.setSpacing(6)
         self.ondemand_com_port = QComboBox()
         self.ondemand_com_port.setEditable(False)
         self.ondemand_com_port.setPlaceholderText("Select COM port")
-        self.ondemand_com_port.setMaximumWidth(200)
+        self.ondemand_com_port.setMinimumWidth(200)
+        self.ondemand_com_port.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.populate_ondemand_com_ports()
-        grid.addWidget(self.ondemand_com_port, 0, 1)
+        com_port_layout.addWidget(self.ondemand_com_port)
         
-        # Refresh button for COM ports
-        refresh_com_btn = QPushButton("🔄")
-        refresh_com_btn.setMaximumWidth(35)
-        refresh_com_btn.setFixedHeight(28)
+        refresh_com_btn = QPushButton("↻")
+        refresh_com_btn.setFixedSize(32, 32)
         refresh_com_btn.setToolTip("Refresh COM ports")
         refresh_com_btn.setStyleSheet("""
             QPushButton {
-                font-size: 14px;
+                font-size: 16px;
+                font-weight: bold;
                 border: 1px solid #555;
                 border-radius: 4px;
                 background-color: #2d2d2d;
-                padding: 2px;
             }
             QPushButton:hover {
                 background-color: #3d3d3d;
@@ -690,14 +754,18 @@ class NetworkSetupWindow(QMainWindow):
             }
         """)
         refresh_com_btn.clicked.connect(self.populate_ondemand_com_ports)
-        grid.addWidget(refresh_com_btn, 0, 2)
+        com_port_layout.addWidget(refresh_com_btn)
+        grid.addLayout(com_port_layout, 0, 1, 1, 2)
         
-        # Baud Rate
-        grid.addWidget(QLabel("Baud Rate:"), 0, 3)
+        baud_rate_label = QLabel("Baud Rate:")
+        baud_rate_label.setStyleSheet("font-weight: 500;")
+        grid.addWidget(baud_rate_label, 0, 3, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
         self.ondemand_baud_rate = QComboBox()
         self.ondemand_baud_rate.addItems(["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"])
         self.ondemand_baud_rate.setCurrentText("115200")
-        self.ondemand_baud_rate.setMaximumWidth(150)
+        self.ondemand_baud_rate.setMinimumWidth(120)
+        self.ondemand_baud_rate.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         grid.addWidget(self.ondemand_baud_rate, 0, 4)
         
         # Hidden fields with default values (not shown in UI)
@@ -723,15 +791,28 @@ class NetworkSetupWindow(QMainWindow):
         
         layout.addLayout(grid)
         
+        # Status section
+        status_layout = QHBoxLayout()
+        status_layout.setSpacing(8)
+        status_label = QLabel("Status:")
+        status_label.setStyleSheet("font-weight: 500;")
         self.ondemand_status_text = QLabel("Not Connected")
         self.ondemand_status_text.setObjectName("statusError")
-        layout.addWidget(self.ondemand_status_text)
+        status_layout.addWidget(status_label)
+        status_layout.addWidget(self.ondemand_status_text)
+        status_layout.addStretch()
+        layout.addLayout(status_layout)
         
-        # Apply button for on-demand scanner section
-        apply_ondemand_btn = QPushButton("Apply On-Demand Scanner")
+        # Apply button
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        apply_ondemand_btn = QPushButton("Apply On-Demand Scanner Configuration")
         apply_ondemand_btn.setObjectName("primary")
+        apply_ondemand_btn.setMinimumWidth(220)
+        apply_ondemand_btn.setFixedHeight(36)
         apply_ondemand_btn.clicked.connect(self.apply_ondemand_configuration)
-        layout.addWidget(apply_ondemand_btn)
+        button_layout.addWidget(apply_ondemand_btn)
+        layout.addLayout(button_layout)
         
         return section
     
@@ -876,41 +957,55 @@ class NetworkSetupWindow(QMainWindow):
     def create_output_section(self):
         section = QFrame()
         section.setObjectName("panel")
-        section.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        section.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(20, 15, 20, 15)
-        layout.setSpacing(10)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
         
+        # Header
         title = QLabel("Output Configuration (UDP)")
         title.setObjectName("h2")
         layout.addWidget(title)
         
-        desc = QLabel("Send validation results to PLC/controller:")
+        desc = QLabel("Send validation results to PLC/controller via UDP network")
         desc.setWordWrap(True)
+        desc.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 8px;")
         layout.addWidget(desc)
         
-        grid = QGridLayout()
-        grid.setSpacing(8)
+        # Separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setStyleSheet("background-color: #444; max-height: 1px;")
+        layout.addWidget(separator)
         
-        # Local IP (dropdown with available network interfaces)
-        grid.addWidget(QLabel("Local IP:"), 0, 0)
+        # Form grid
+        form = QGridLayout()
+        form.setSpacing(12)
+        form.setColumnMinimumWidth(0, 100)
+        form.setColumnStretch(1, 1)
+        
+        # Local IP
+        local_ip_label = QLabel("Local IP:")
+        local_ip_label.setStyleSheet("font-weight: 500;")
+        form.addWidget(local_ip_label, 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
+        local_ip_container = QHBoxLayout()
+        local_ip_container.setSpacing(6)
         self.output_local_ip = QComboBox()
         self.output_local_ip.setEditable(True)
-        self.output_local_ip.setMaximumWidth(250)
-        grid.addWidget(self.output_local_ip, 0, 1)
+        self.output_local_ip.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        local_ip_container.addWidget(self.output_local_ip)
         
-        # Refresh button for local IPs
-        refresh_output_ip_btn = QPushButton("🔄")
-        refresh_output_ip_btn.setMaximumWidth(35)
-        refresh_output_ip_btn.setFixedHeight(28)
+        refresh_output_ip_btn = QPushButton("↻")
+        refresh_output_ip_btn.setFixedSize(32, 32)
         refresh_output_ip_btn.setToolTip("Refresh network interfaces")
         refresh_output_ip_btn.setStyleSheet("""
             QPushButton {
-                font-size: 14px;
+                font-size: 16px;
+                font-weight: bold;
                 border: 1px solid #555;
                 border-radius: 4px;
                 background-color: #2d2d2d;
-                padding: 2px;
             }
             QPushButton:hover {
                 background-color: #3d3d3d;
@@ -921,50 +1016,79 @@ class NetworkSetupWindow(QMainWindow):
             }
         """)
         refresh_output_ip_btn.clicked.connect(lambda: self.populate_local_ip_dropdown(self.output_local_ip))
-        grid.addWidget(refresh_output_ip_btn, 0, 2)
+        local_ip_container.addWidget(refresh_output_ip_btn)
+        form.addLayout(local_ip_container, 0, 1)
         
         # Local Port
-        grid.addWidget(QLabel("Local Port:"), 0, 3)
+        local_port_label = QLabel("Local Port:")
+        local_port_label.setStyleSheet("font-weight: 500;")
+        form.addWidget(local_port_label, 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
         self.output_local_port = QComboBox()
         self.output_local_port.setEditable(True)
         self.output_local_port.addItems(["0", "5000", "5001", "5002", "6000", "7000", "8000", "9000"])
         self.output_local_port.setCurrentText("0")
-        self.output_local_port.setMaximumWidth(120)
-        grid.addWidget(self.output_local_port, 0, 4)
+        self.output_local_port.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        form.addWidget(self.output_local_port, 1, 1)
         
-        grid.addWidget(QLabel("Remote IP:"), 1, 0)
+        # Remote IP
+        remote_ip_label = QLabel("Remote IP:")
+        remote_ip_label.setStyleSheet("font-weight: 500;")
+        form.addWidget(remote_ip_label, 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
         self.output_remote_ip = QComboBox()
         self.output_remote_ip.setEditable(True)
-        self.output_remote_ip.setPlaceholderText("PLC IP")
-        self.output_remote_ip.setMaximumWidth(250)
+        self.output_remote_ip.setPlaceholderText("PLC IP address")
+        self.output_remote_ip.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.output_remote_ip.addItem("")
         self.output_remote_ip.showPopup = lambda: self._show_popup_with_refresh(self.output_remote_ip)
-        grid.addWidget(self.output_remote_ip, 1, 1, 1, 2)
+        form.addWidget(self.output_remote_ip, 2, 1)
         
-        grid.addWidget(QLabel("Remote Port:"), 1, 3)
+        # Remote Port
+        remote_port_label = QLabel("Remote Port:")
+        remote_port_label.setStyleSheet("font-weight: 500;")
+        form.addWidget(remote_port_label, 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
         self.output_remote_port = QComboBox()
         self.output_remote_port.setEditable(True)
         self.output_remote_port.addItems(["6000", "6001", "6002", "5000", "5001", "7000", "8000", "9000", "10000"])
         self.output_remote_port.setCurrentText("6000")
-        self.output_remote_port.setMaximumWidth(120)
-        grid.addWidget(self.output_remote_port, 1, 4)
+        self.output_remote_port.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        form.addWidget(self.output_remote_port, 3, 1)
         
-        grid.addWidget(QLabel("Format:"), 2, 0)
+        # Format
+        format_label = QLabel("Format:")
+        format_label.setStyleSheet("font-weight: 500;")
+        form.addWidget(format_label, 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
         self.output_format_combo = QComboBox()
-        self.output_format_combo.setMaximumWidth(250)
-        grid.addWidget(self.output_format_combo, 2, 1, 1, 2)
+        self.output_format_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        form.addWidget(self.output_format_combo, 4, 1)
         
-        layout.addLayout(grid)
+        layout.addLayout(form)
         
+        # Status
+        status_container = QHBoxLayout()
+        status_container.setSpacing(8)
+        status_label = QLabel("Status:")
+        status_label.setStyleSheet("font-weight: 500;")
         self.output_status_text = QLabel("Not Connected")
         self.output_status_text.setObjectName("statusError")
-        layout.addWidget(self.output_status_text)
+        status_container.addWidget(status_label)
+        status_container.addWidget(self.output_status_text)
+        status_container.addStretch()
+        layout.addLayout(status_container)
         
-        # Apply button for output section
-        apply_output_btn = QPushButton("Apply Output")
+        # Apply button
+        button_container = QHBoxLayout()
+        button_container.addStretch()
+        apply_output_btn = QPushButton("Apply Configuration")
         apply_output_btn.setObjectName("primary")
+        apply_output_btn.setMinimumWidth(180)
+        apply_output_btn.setFixedHeight(36)
         apply_output_btn.clicked.connect(self.apply_output_configuration)
-        layout.addWidget(apply_output_btn)
+        button_container.addWidget(apply_output_btn)
+        layout.addLayout(button_container)
         
         return section
 
@@ -973,7 +1097,7 @@ class NetworkSetupWindow(QMainWindow):
         layout.setSpacing(12)
         layout.setContentsMargins(0, 10, 0, 10)
         
-        test_btn = QPushButton("🔍 Test Connection")
+        test_btn = QPushButton("Test Connection")
         test_btn.setObjectName("secondary")
         test_btn.setFixedHeight(40)
         test_btn.clicked.connect(self.test_udp_connection)
@@ -984,7 +1108,7 @@ class NetworkSetupWindow(QMainWindow):
         disconnect_btn.setFixedHeight(40)
         disconnect_btn.clicked.connect(self.disconnect_all)
         
-        refresh_btn = QPushButton("🔄 Refresh Network")
+        refresh_btn = QPushButton("Refresh Network")
         refresh_btn.setObjectName("secondary")
         refresh_btn.setFixedHeight(40)
         refresh_btn.clicked.connect(self.refresh_network_info)

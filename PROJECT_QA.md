@@ -1157,3 +1157,57 @@ ROI: 1-6 months (vs manual validation)
 **Last Updated**: January 19, 2026
 **Version**: 1.0
 **Project**: Card Sequence Validator
+
+
+---
+
+## Q8: Can you improve the Network Setup window UI design?
+
+**A:** Yes! The Network Setup window has been completely redesigned with a professional, consistent layout.
+
+### What Was Changed:
+
+**Layout Improvements:**
+- All three sections (Main Scanner, On-Demand Scanner, Output) now have consistent spacing and margins
+- Increased margins to 24px horizontal, 20px vertical (from 20px/15px)
+- Increased element spacing to 16px (from 10px)
+- Form-style layout with right-aligned labels (100px minimum width)
+- **Equal sizing**: Main Scanner and Output sections now have equal width and height
+
+**Visual Enhancements:**
+- Added horizontal separator lines below section descriptions
+- Descriptions styled with muted color (#888) and smaller font (12px)
+- Labels have font-weight: 500 for better emphasis
+- Status displayed inline with "Status:" label prefix
+- Professional button styling with consistent sizing
+
+**Responsive Design:**
+- Removed all maximum width constraints on input fields
+- Fields now expand to fill available space
+- Equal column stretch (1:1) in grid layout for balanced appearance
+- Works well on different screen sizes
+- Consistent 32x32px refresh buttons across all sections
+
+**Button Improvements:**
+- All apply buttons: 36px height, 180-220px minimum width
+- Right-aligned for professional appearance
+- Clear text: "Apply Configuration"
+- **Refresh buttons fixed**: Replaced emoji "🔄" with Unicode "↻" character for proper Windows rendering
+- Increased refresh button font to 16px bold for better visibility
+- Removed emojis from action buttons (Test Connection, Refresh Network)
+
+**Equal Section Sizing:**
+- Added spacer row to Main Scanner section to match Output section height
+- Both UDP sections now have identical visual appearance
+- Grid layout uses equal column stretch for balanced width distribution
+
+### Result:
+The Network Setup window now has a professional, even layout with:
+- Equal-sized Main Scanner and Output sections
+- Working refresh buttons (no emoji rendering issues)
+- Consistent spacing and visual hierarchy
+- Responsive design that adapts to window size
+- Windows-compatible button rendering
+
+**Files Modified:** `src/ui/network_setup.py`
+**Documentation:** `NETWORK_SETUP_UI_REDESIGN.md`
