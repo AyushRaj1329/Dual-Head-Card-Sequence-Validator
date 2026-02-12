@@ -25,7 +25,15 @@ APP_AUTHOR = "YourCompany"
 
 def get_cache_file_path():
     cache_dir = user_data_dir(APP_NAME, APP_AUTHOR)
-    os.makedirs(cache_dir, exist_ok=True)
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+    except PermissionError:
+        # If we can't write to the default location, use temp directory
+        import tempfile
+        cache_dir = os.path.join(tempfile.gettempdir(), APP_NAME)
+        os.makedirs(cache_dir, exist_ok=True)
+    except Exception as e:
+        print(f"Warning: Could not create cache directory: {e}")
     return os.path.join(cache_dir, "app_cache.json")
 
 def atomic_write_cache(cache_file_path, cache_data):
@@ -49,12 +57,18 @@ def atomic_write_cache(cache_file_path, cache_data):
         else:
             os.rename(temp_file_path, cache_file_path)
         
-        # Sync the directory to ensure rename is persisted
-        dir_fd = os.open(os.path.dirname(cache_file_path), os.O_RDONLY)
+        # Sync the directory to ensure rename is persisted (Windows-safe)
         try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
+            dir_path = os.path.dirname(cache_file_path)
+            if dir_path and os.path.exists(dir_path):
+                dir_fd = os.open(dir_path, os.O_RDONLY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+        except (OSError, NotImplementedError):
+            # Directory sync not supported on this OS/filesystem, skip it
+            pass
     except Exception as e:
         # Clean up temp file if it exists
         try:
