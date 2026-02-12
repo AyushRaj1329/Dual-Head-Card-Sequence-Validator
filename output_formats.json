@@ -1,19 +1,19 @@
 {
   "Integers": {
     "single": {
-      "OK": "17",
-      "NOT OK": "18",
-      "OK (JUMPED)": "17"
+      "OK": "17\r\n",
+      "NOT OK": "18\r\n",
+      "OK (JUMPED)": "17\r\n"
     },
     "half": {
-      "OK": "9",
-      "NOT OK": "10",
-      "OK (JUMPED)": "10"
+      "OK": "9\r\n",
+      "NOT OK": "10\r\n",
+      "OK (JUMPED)": "9\r\n"
     },
     "quarter": {
-      "OK": "5",
-      "NOT OK": "6",
-      "OK (JUMPED)": "5"
+      "OK": "5\r\n",
+      "NOT OK": "6\r\n",
+      "OK (JUMPED)": "5\r\n"
     }
   }
 }

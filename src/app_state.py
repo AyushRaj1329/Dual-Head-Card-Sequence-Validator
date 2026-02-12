@@ -872,8 +872,8 @@ class AppState(QObject):
         output_signal = card_type_config.get(status)
         
         if output_signal:
-            # Always send as binary integer
-            self.output_udp_writer.send(output_signal, as_binary_int=True)
+            # Send as ASCII text string (not binary)
+            self.output_udp_writer.send(output_signal, as_binary_int=False)
 
     def resolve_mismatch(self, scanned_code, approved, future_index):
         thread = threading.Thread(target=self._perform_mismatch_resolution, args=(scanned_code, approved, future_index))
