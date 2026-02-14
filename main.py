@@ -2,6 +2,7 @@ import sys
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 import os
+import json
 
 # Only import the necessary components to start the application
 from src.app_state import AppState
@@ -22,6 +23,26 @@ def resource_path(relative_path):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(resource_path("assets/Icon.png")))
+
+    # Load the last selected instance before creating AppState
+    from src.app_state import get_current_instance, set_current_instance, get_cache_file_path
+    from appdirs import user_data_dir
+    import json
+    
+    APP_NAME = "CardSequenceValidator"
+    APP_AUTHOR = "YourCompany"
+    cache_dir = user_data_dir(APP_NAME, APP_AUTHOR)
+    instance_config_path = os.path.join(cache_dir, "instance_config.json")
+    
+    try:
+        if os.path.exists(instance_config_path):
+            with open(instance_config_path, 'r') as f:
+                config = json.load(f)
+                instance = config.get('current_instance', 1)
+                if instance in (1, 2):
+                    set_current_instance(instance)
+    except:
+        pass
 
     # Create the single instance of the app's brain (AppState) with default card type
     # Card type will be auto-detected when a file is loaded

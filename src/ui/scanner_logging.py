@@ -131,6 +131,11 @@ class ScannerLoggingWindow(QMainWindow):
         title = QLabel("Live Scanner Feed & Validation Log")
         title.setObjectName("h1")
 
+        # Instance Display
+        self.instance_display = QLabel()
+        self.instance_display.setObjectName("accent")
+        self.update_instance_display()
+
         self.start_btn = QPushButton("Start Validation")
         self.start_btn.setObjectName("primary")
         self.start_btn.clicked.connect(self.start_scanning_clicked)
@@ -141,10 +146,19 @@ class ScannerLoggingWindow(QMainWindow):
 
         layout.addWidget(title)
         layout.addStretch()
+        layout.addWidget(self.instance_display)
         layout.addWidget(ClockWidget())
         layout.addWidget(self.start_btn)
         layout.addWidget(self.stop_btn)
         parent_layout.addLayout(layout)
+        
+        # Connect to instance changes
+        self.app_state.state_changed.connect(self.update_instance_display)
+
+    def update_instance_display(self):
+        """Update the instance display label"""
+        instance_num = self.app_state.current_instance
+        self.instance_display.setText(f"Instance {instance_num}")
 
     def create_scanner_section(self, parent_layout):
         frame = QFrame()
@@ -237,17 +251,8 @@ class ScannerLoggingWindow(QMainWindow):
         # Single Card: No scan side column (only 1 QR, no sides)
         # Half/Quarter Card: Show scan side column (multiple QRs, sides matter)
         if self.app_state.card_type == CardType.SINGLE:
-            self.log_table.setColumnCount(5)
-            self.log_table.setHorizontalHeaderLabels(["Entry #", "Time", "Scanned ID", "Expected ID", "Result"])
-            header = self.log_table.horizontalHeader()
-            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        else:  # Half or Quarter Card
             self.log_table.setColumnCount(6)
-            self.log_table.setHorizontalHeaderLabels(["Entry #", "Time", "Scanned ID", "Expected ID", "Result", "Scan Side"])
+            self.log_table.setHorizontalHeaderLabels(["Entry #", "Time", "Scanned ID", "Expected ID", "Result", "Instance"])
             header = self.log_table.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -255,6 +260,17 @@ class ScannerLoggingWindow(QMainWindow):
             header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
             header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        else:  # Half or Quarter Card
+            self.log_table.setColumnCount(7)
+            self.log_table.setHorizontalHeaderLabels(["Entry #", "Time", "Scanned ID", "Expected ID", "Result", "Scan Side", "Instance"])
+            header = self.log_table.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
     
     def rebuild_log_table(self, card_type):
         """Rebuild log table when card type changes"""
@@ -310,6 +326,15 @@ class ScannerLoggingWindow(QMainWindow):
             from ..card_types import CardType
             if self.app_state.card_type != CardType.SINGLE:
                 self.log_table.setItem(row_position, 5, QTableWidgetItem(log_entry.get("scanned_side", "N/A")))
+                # Instance column at position 6
+                instance_item = QTableWidgetItem(f"Instance {log_entry.get('instance', 1)}")
+                instance_item.setForeground(QColor("#00aaff"))
+                self.log_table.setItem(row_position, 6, instance_item)
+            else:
+                # Instance column at position 5 for single card
+                instance_item = QTableWidgetItem(f"Instance {log_entry.get('instance', 1)}")
+                instance_item.setForeground(QColor("#00aaff"))
+                self.log_table.setItem(row_position, 5, instance_item)
 
         total_items = len(self.filtered_log_entries)
         total_pages = (total_items + self.items_per_page - 1) // self.items_per_page

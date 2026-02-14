@@ -23,6 +23,19 @@ from .card_types import CardType
 APP_NAME = "CardSequenceValidator"
 APP_AUTHOR = "YourCompany"
 
+# Global instance tracker
+_current_instance = 1
+
+def set_current_instance(instance_num):
+    """Set the current instance (1 or 2)"""
+    global _current_instance
+    if instance_num in (1, 2):
+        _current_instance = instance_num
+
+def get_current_instance():
+    """Get the current instance number"""
+    return _current_instance
+
 def get_cache_file_path():
     cache_dir = user_data_dir(APP_NAME, APP_AUTHOR)
     try:
@@ -34,7 +47,11 @@ def get_cache_file_path():
         os.makedirs(cache_dir, exist_ok=True)
     except Exception as e:
         print(f"Warning: Could not create cache directory: {e}")
-    return os.path.join(cache_dir, "app_cache.json")
+    
+    # Use instance-specific cache file
+    instance = get_current_instance()
+    cache_filename = f"app_cache_instance_{instance}.json"
+    return os.path.join(cache_dir, cache_filename)
 
 def atomic_write_cache(cache_file_path, cache_data):
     """Write cache atomically to prevent corruption on power loss.
@@ -192,6 +209,9 @@ class AppState(QObject):
         self.ondemand_port_reader = None
         self.output_udp_writer = UDPWriter()
 
+        # Instance tracking
+        self.current_instance = get_current_instance()
+
         # UDP Configuration (replaces COM port configuration)
         self.main_scanner_config = None  # {'local_ip': str, 'local_port': int, 'remote_ip': str, 'remote_port': int}
         self.ondemand_scanner_config = None
@@ -231,6 +251,9 @@ class AppState(QObject):
         self.is_waiting_for_count_card_2 = False
         self.first_card_index = -1
 
+        # Load instance selection first (before loading cache)
+        self.load_instance_selection()
+        
         self.load_output_formats()
         self.load_cache()
 
@@ -328,6 +351,40 @@ class AppState(QObject):
             atomic_write_cache(cache_file_path, cache_data)
         except Exception as e:
             print(f"Warning: Failed to save cache: {e}")
+        
+        # Also save the current instance selection globally
+        self.save_instance_selection()
+
+    def save_instance_selection(self):
+        """Save the current instance selection to a global config file"""
+        cache_dir = user_data_dir(APP_NAME, APP_AUTHOR)
+        try:
+            os.makedirs(cache_dir, exist_ok=True)
+        except:
+            pass
+        
+        instance_config_path = os.path.join(cache_dir, "instance_config.json")
+        try:
+            config = {'current_instance': self.current_instance}
+            with open(instance_config_path, 'w') as f:
+                json.dump(config, f)
+        except Exception as e:
+            print(f"Warning: Failed to save instance selection: {e}")
+
+    def load_instance_selection(self):
+        """Load the last selected instance from global config"""
+        cache_dir = user_data_dir(APP_NAME, APP_AUTHOR)
+        instance_config_path = os.path.join(cache_dir, "instance_config.json")
+        try:
+            if os.path.exists(instance_config_path):
+                with open(instance_config_path, 'r') as f:
+                    config = json.load(f)
+                    instance = config.get('current_instance', 1)
+                    if instance in (1, 2):
+                        set_current_instance(instance)
+                        self.current_instance = instance
+        except Exception as e:
+            print(f"Warning: Failed to load instance selection: {e}")
 
     def load_output_formats(self):
         try:
@@ -618,7 +675,14 @@ class AppState(QObject):
         return datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
     def add_log_entry(self, scanned_code, expected_code, status, scanned_side="N/A"):
-        log_entry = {"timestamp": self.get_timestamp(), "scanned_code": scanned_code, "expected_code": expected_code, "status": status, "scanned_side": scanned_side}
+        log_entry = {
+            "timestamp": self.get_timestamp(),
+            "scanned_code": scanned_code,
+            "expected_code": expected_code,
+            "status": status,
+            "scanned_side": scanned_side,
+            "instance": self.current_instance
+        }
         self.log_data.append(log_entry)
         return log_entry
 

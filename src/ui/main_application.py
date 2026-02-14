@@ -1,7 +1,7 @@
 # src/ui/main_application.py
 import sys
 import os
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QGraphicsOpacityEffect, QSizePolicy, QScrollArea, QMessageBox
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QGraphicsOpacityEffect, QSizePolicy, QScrollArea, QMessageBox, QButtonGroup
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QRect, QParallelAnimationGroup, QTimer
 from PyQt6.QtGui import QPixmap, QScreen
 
@@ -81,6 +81,7 @@ class HomePage(QMainWindow):
             widget.setAutoFillBackground(True)
 
         self.app_state.state_changed.connect(self.update_status_indicators)
+        self.app_state.state_changed.connect(self.update_instance_button_state)
         self.app_state.output_com_status_changed.connect(self.update_output_port_status)
         
         self.update_status_indicators()
@@ -215,6 +216,32 @@ class HomePage(QMainWindow):
 
         clock = ClockWidget()
 
+        # Instance Selector - Toggle Button Style
+        instance_layout = QVBoxLayout()
+        instance_layout.setSpacing(3)
+        instance_label = QLabel("Instance")
+        instance_label.setObjectName("subtitle")
+        instance_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.instance_button_group = QButtonGroup()
+        instance_button_layout = QHBoxLayout()
+        instance_button_layout.setSpacing(2)
+        
+        for instance_num in [1, 2]:
+            btn = QPushButton(f"Instance {instance_num}")
+            btn.setCheckable(True)
+            btn.setObjectName("instanceToggle")
+            btn.setMaximumWidth(110)
+            btn.setMinimumHeight(32)
+            if instance_num == self.app_state.current_instance:
+                btn.setChecked(True)
+            btn.clicked.connect(lambda checked, num=instance_num: self.switch_instance(num))
+            self.instance_button_group.addButton(btn, instance_num)
+            instance_button_layout.addWidget(btn)
+        
+        instance_layout.addWidget(instance_label)
+        instance_layout.addLayout(instance_button_layout)
+
         # Theme Toggle Button
         self.theme_button = QPushButton() # Initialize without text
         self.theme_button.clicked.connect(self.toggle_theme)
@@ -228,6 +255,7 @@ class HomePage(QMainWindow):
         header_layout.addLayout(title_layout, 1)  # Add stretch factor
         header_layout.addStretch()
         header_layout.addWidget(clock)
+        header_layout.addLayout(instance_layout)
         header_layout.addWidget(self.theme_button)
 
     def update_theme_button_text(self, theme_name):
@@ -240,6 +268,47 @@ class HomePage(QMainWindow):
         self.theme_button.style().unpolish(self.theme_button)
         self.theme_button.style().polish(self.theme_button)
 
+    def switch_instance(self, instance_num):
+        """Switch to a different instance and reload its data"""
+        # Prevent switching if scanning is active
+        if self.app_state.is_scanning:
+            QMessageBox.warning(
+                self,
+                "Cannot Switch Instance",
+                "Instance cannot be changed while scanning is active.\n\nStop the validation first to switch instances."
+            )
+            # Revert the button to the current instance
+            current_btn = self.instance_button_group.button(self.app_state.current_instance)
+            if current_btn:
+                current_btn.setChecked(True)
+            return
+        
+        if instance_num == self.app_state.current_instance:
+            return  # Already on this instance
+        
+        # Save current instance data
+        self.app_state.save_cache()
+        
+        # Switch instance
+        from src.app_state import set_current_instance
+        set_current_instance(instance_num)
+        self.app_state.current_instance = instance_num
+        
+        # Reload data for new instance
+        self.app_state.load_cache()
+        
+        # Update UI to reflect new instance data
+        self.update_status_indicators()
+        self.app_state.state_changed.emit()
+        
+        # Show confirmation
+        QMessageBox.information(self, "Instance Switched", f"Switched to Instance {instance_num}")
+
+    def update_instance_button_state(self):
+        """Enable/disable instance buttons based on scanning status"""
+        is_scanning = self.app_state.is_scanning
+        for btn in self.instance_button_group.buttons():
+            btn.setEnabled(not is_scanning)
 
     def create_welcome_section(self, container):
         layout = QVBoxLayout(container)

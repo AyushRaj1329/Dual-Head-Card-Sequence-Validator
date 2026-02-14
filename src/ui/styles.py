@@ -145,6 +145,31 @@ QPushButton#light_theme_toggle:pressed {
     background-color: #004085;
 }
 
+/* Instance Toggle Button Styles - Dark Theme */
+QPushButton#instanceToggle {
+    background-color: #555c6b;
+    color: #e0e0e0;
+    border: 2px solid #555c6b;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: bold;
+    min-width: 100px;
+}
+QPushButton#instanceToggle:hover {
+    background-color: #666e7f;
+    border: 2px solid #666e7f;
+}
+QPushButton#instanceToggle:checked {
+    background-color: #00aaff;
+    color: #ffffff;
+    border: 2px solid #00aaff;
+}
+QPushButton#instanceToggle:checked:hover {
+    background-color: #33bbff;
+    border: 2px solid #33bbff;
+}
+
 /* ---- Inputs & Dropdowns ---- */
 QComboBox, QLineEdit {
     background-color: #2c313c;
@@ -362,6 +387,31 @@ QPushButton#light_theme_toggle:hover {
 }
 QPushButton#light_theme_toggle:pressed {
     background-color: #004085;
+}
+
+/* Instance Toggle Button Styles - Light Theme */
+QPushButton#instanceToggle {
+    background-color: #6c757d;
+    color: #ffffff;
+    border: 2px solid #6c757d;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: bold;
+    min-width: 100px;
+}
+QPushButton#instanceToggle:hover {
+    background-color: #5a6268;
+    border: 2px solid #5a6268;
+}
+QPushButton#instanceToggle:checked {
+    background-color: #007bff;
+    color: #ffffff;
+    border: 2px solid #007bff;
+}
+QPushButton#instanceToggle:checked:hover {
+    background-color: #0056b3;
+    border: 2px solid #0056b3;
 }
 
 /* ---- Inputs & Dropdowns ---- */
