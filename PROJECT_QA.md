@@ -1211,3 +1211,57 @@ The Network Setup window now has a professional, even layout with:
 
 **Files Modified:** `src/ui/network_setup.py`
 **Documentation:** `NETWORK_SETUP_UI_REDESIGN.md`
+
+
+---
+
+## Q9: Why doesn't the Main Scanner status update when I click "Apply Configuration"?
+
+**A:** This has been fixed! The Main Scanner status now updates properly and requires ALL fields (including Remote IP and Port) just like the Output section.
+
+### What Was Fixed:
+
+**Problem:**
+- Status showed "Connected" even when only Local IP/Port were entered
+- Remote IP and Port were treated as optional
+- Inconsistent with Output section which requires all fields
+
+**Root Cause:**
+- The `apply_main_scanner_configuration()` method treated Remote IP/Port as optional
+- Status updated even with incomplete configuration
+- Different validation logic than Output section
+
+**Solution:**
+- Main Scanner now requires BOTH Remote IP AND Remote Port (like Output section)
+- Status only shows "Connected" when ALL fields are provided
+- Validates both Local Port and Remote Port ranges (1-65535)
+- Updated placeholder text to show "Required" instead of "Optional"
+
+### Required Fields:
+
+**Main Scanner (Input):**
+1. ✅ Local IP - Required
+2. ✅ Local Port - Required
+3. ✅ Remote IP - Required (scanner device IP)
+4. ✅ Remote Port - Required (scanner device port)
+
+**Output:**
+1. ✅ Local IP - Required
+2. ✅ Local Port - Required
+3. ✅ Remote IP - Required (PLC/controller IP)
+4. ✅ Remote Port - Required (PLC/controller port)
+
+### Status Behavior:
+
+| Condition | Status Display | Color |
+|-----------|---------------|-------|
+| Missing Remote IP or Port | "Not Connected" | Red |
+| All fields valid, not scanning | "Configured: 192.168.1.100:5000 → 192.168.1.50:6000" | Green |
+| All fields valid, scanning | "Listening on 192.168.1.100:5000" | Green |
+| Scanning stopped | "Not Set" | Red |
+
+### Result:
+The Main Scanner now behaves EXACTLY like the Output section - both require all fields (Local IP, Local Port, Remote IP, Remote Port) before showing "Connected" status.
+
+**Files Modified:** `src/ui/network_setup.py`
+**Documentation:** `MAIN_SCANNER_STATUS_FIX.md`

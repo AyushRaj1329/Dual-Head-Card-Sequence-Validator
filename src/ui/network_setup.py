@@ -322,10 +322,12 @@ class NetworkSetupWindow(QMainWindow):
                 main_local_ip = main_local_ip_text
             
             main_local_port = self.main_local_port.currentText().strip()
-            main_remote_ip = self.main_remote_ip.currentText().strip() or None
-            main_remote_port = self.main_remote_port.currentText().strip() or None
+            main_remote_ip = self.main_remote_ip.currentText().strip()
+            main_remote_port = self.main_remote_port.currentText().strip()
             
-            if main_local_ip and main_local_port:
+            # Require both remote IP and remote port (like Output section)
+            if main_remote_ip and main_remote_port:
+                # Validate local port
                 try:
                     main_local_port_int = int(main_local_port)
                     if not (1 <= main_local_port_int <= 65535):
@@ -334,15 +336,38 @@ class NetworkSetupWindow(QMainWindow):
                     QMessageBox.warning(self, "Validation Error", f"Local Port: {e}")
                     return
                 
+                # Validate remote port
+                try:
+                    main_remote_port_int = int(main_remote_port)
+                    if not (1 <= main_remote_port_int <= 65535):
+                        raise ValueError("Port must be between 1 and 65535")
+                except ValueError as e:
+                    QMessageBox.warning(self, "Validation Error", f"Remote Port: {e}")
+                    return
+                
                 self.app_state.stop_scanning()
                 self.app_state.main_scanner_config = {
-                    'local_ip': main_local_ip,
+                    'local_ip': main_local_ip or "0.0.0.0",
                     'local_port': int(main_local_port),
                     'remote_ip': main_remote_ip,
-                    'remote_port': int(main_remote_port) if main_remote_port else None
+                    'remote_port': int(main_remote_port)
                 }
+                
+                # Update status to show configuration is ready
+                config_msg = f"Configured: {main_local_ip or '0.0.0.0'}:{main_local_port} → {main_remote_ip}:{main_remote_port}"
+                self.main_status_text.setText(config_msg)
+                self.main_status_text.setObjectName("statusOK")
+                self.main_status_text.style().unpolish(self.main_status_text)
+                self.main_status_text.style().polish(self.main_status_text)
+                self.add_log_entry(f"Main scanner configured: {main_local_ip}:{main_local_port} → {main_remote_ip}:{main_remote_port}", "green")
             else:
+                # Clear configuration if remote IP/port not provided
                 self.app_state.main_scanner_config = None
+                self.main_status_text.setText("Not Connected")
+                self.main_status_text.setObjectName("statusError")
+                self.main_status_text.style().unpolish(self.main_status_text)
+                self.main_status_text.style().polish(self.main_status_text)
+                self.add_log_entry("Main scanner disconnected - Remote IP and Port required", "orange")
             
             self.app_state.state_changed.emit()
             self.app_state.save_cache()
@@ -445,6 +470,10 @@ class NetworkSetupWindow(QMainWindow):
             if hasattr(self.app_state, 'main_scanner_config') and self.app_state.main_scanner_config:
                 config = self.app_state.main_scanner_config
                 local_ip = config.get('local_ip', '')
+                local_port = config.get('local_port', '')
+                remote_ip = config.get('remote_ip', '')
+                remote_port = config.get('remote_port', '')
+                
                 if local_ip:
                     # Try to find and select the IP in dropdown
                     found = False
@@ -459,11 +488,36 @@ class NetworkSetupWindow(QMainWindow):
                     if not found:
                         self.main_local_ip.setEditText(local_ip)
                 
-                self.main_local_port.setEditText(str(config.get('local_port', '')))
-                remote_ip = config.get('remote_ip', '') or ''
+                self.main_local_port.setEditText(str(local_port))
                 if remote_ip:
                     self.main_remote_ip.setEditText(remote_ip)
-                self.main_remote_port.setEditText(str(config.get('remote_port', '')) if config.get('remote_port') else '')
+                if remote_port:
+                    self.main_remote_port.setEditText(str(remote_port))
+                
+                # Update status - require both remote IP and port (like Output section)
+                if remote_ip and remote_port:
+                    if self.app_state.is_scanning:
+                        status_msg = f"Listening on {local_ip}:{local_port}"
+                        self.main_status_text.setText(status_msg)
+                        self.main_status_text.setObjectName("statusOK")
+                    else:
+                        status_msg = f"Configured: {local_ip}:{local_port} → {remote_ip}:{remote_port}"
+                        self.main_status_text.setText(status_msg)
+                        self.main_status_text.setObjectName("statusOK")
+                    self.main_status_text.style().unpolish(self.main_status_text)
+                    self.main_status_text.style().polish(self.main_status_text)
+                else:
+                    # No remote IP/port - not connected
+                    self.main_status_text.setText("Not Connected")
+                    self.main_status_text.setObjectName("statusError")
+                    self.main_status_text.style().unpolish(self.main_status_text)
+                    self.main_status_text.style().polish(self.main_status_text)
+            else:
+                # No configuration
+                self.main_status_text.setText("Not Connected")
+                self.main_status_text.setObjectName("statusError")
+                self.main_status_text.style().unpolish(self.main_status_text)
+                self.main_status_text.style().polish(self.main_status_text)
             
             # On-demand scanner (serial)
             if hasattr(self.app_state, 'start_card_scan_port') and self.app_state.start_card_scan_port:
@@ -633,7 +687,7 @@ class NetworkSetupWindow(QMainWindow):
         
         self.main_remote_ip = QComboBox()
         self.main_remote_ip.setEditable(True)
-        self.main_remote_ip.setPlaceholderText("Optional - Scanner IP address")
+        self.main_remote_ip.setPlaceholderText("Required - Scanner IP address")
         self.main_remote_ip.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.main_remote_ip.addItem("")
         self.main_remote_ip.showPopup = lambda: self._show_popup_with_refresh(self.main_remote_ip)
@@ -646,7 +700,7 @@ class NetworkSetupWindow(QMainWindow):
         
         self.main_remote_port = QComboBox()
         self.main_remote_port.setEditable(True)
-        self.main_remote_port.setPlaceholderText("Optional")
+        self.main_remote_port.setPlaceholderText("Required")
         self.main_remote_port.addItems(["", "5001", "5002", "5003", "5004", "5005", "6000", "7000", "8000", "9000"])
         self.main_remote_port.setCurrentText("")
         self.main_remote_port.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
