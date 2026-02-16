@@ -24,33 +24,13 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(resource_path("assets/Icon.png")))
 
-    # Load the last selected instance before creating AppState
-    from src.app_state import get_current_instance, set_current_instance, get_cache_file_path
-    from appdirs import user_data_dir
-    import json
+    # Create dual-head manager for simultaneous operation of Head A and Head B
+    from src.dual_head_manager import DualHeadManager
     
-    APP_NAME = "CardSequenceValidator"
-    APP_AUTHOR = "YourCompany"
-    cache_dir = user_data_dir(APP_NAME, APP_AUTHOR)
-    instance_config_path = os.path.join(cache_dir, "instance_config.json")
-    
-    try:
-        if os.path.exists(instance_config_path):
-            with open(instance_config_path, 'r') as f:
-                config = json.load(f)
-                instance = config.get('current_instance', 1)
-                if instance in (1, 2):
-                    set_current_instance(instance)
-    except:
-        pass
+    dual_head_manager = DualHeadManager()
 
-    # Create the single instance of the app's brain (AppState) with default card type
-    # Card type will be auto-detected when a file is loaded
-    app_state = AppState(card_type=CardType.HALF)  # Start with Half as default
-
-    # Create and show the main window, passing the AppState to it
-    # The HomePage itself will be responsible for creating the other windows.
-    window = HomePage(app_state)
+    # Create and show the main window, passing the DualHeadManager to it
+    window = HomePage(dual_head_manager)
     window.showMaximized()
 
     sys.exit(app.exec())

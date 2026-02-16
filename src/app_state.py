@@ -36,7 +36,8 @@ def get_current_instance():
     """Get the current instance number"""
     return _current_instance
 
-def get_cache_file_path():
+def get_unified_cache_file_path():
+    """Get the unified cache file path for both heads"""
     cache_dir = user_data_dir(APP_NAME, APP_AUTHOR)
     try:
         os.makedirs(cache_dir, exist_ok=True)
@@ -48,10 +49,13 @@ def get_cache_file_path():
     except Exception as e:
         print(f"Warning: Could not create cache directory: {e}")
     
-    # Use instance-specific cache file
-    instance = get_current_instance()
-    cache_filename = f"app_cache_instance_{instance}.json"
+    # Use unified cache file for both heads
+    cache_filename = "app_cache_unified.json"
     return os.path.join(cache_dir, cache_filename)
+
+def get_cache_file_path(instance_num=None):
+    """Get cache file path - now returns unified cache for compatibility"""
+    return get_unified_cache_file_path()
 
 def atomic_write_cache(cache_file_path, cache_data):
     """Write cache atomically to prevent corruption on power loss.
@@ -280,14 +284,39 @@ class AppState(QObject):
         self.theme_changed.emit(self.current_theme)
 
     def load_cache(self):
+        """Load cache from unified cache file"""
         try:
-            with open(get_cache_file_path(), 'r') as f:
-                cache = json.load(f)
+            # Use unified cache file
+            cache_file = get_unified_cache_file_path()
+            
+            print(f"[DEBUG] Instance {self.current_instance} loading from: {cache_file}")
+            
+            if not os.path.exists(cache_file):
+                # Try to migrate from old instance-specific files
+                print(f"[DEBUG] Instance {self.current_instance}: Unified cache not found, trying migration")
+                self._migrate_old_cache()
+                return
+            
+            with open(cache_file, 'r') as f:
+                unified_cache = json.load(f)
+                
+                # Get this instance's section (head_a or head_b)
+                section_key = f"head_{'a' if self.current_instance == 1 else 'b'}"
+                print(f"[DEBUG] Instance {self.current_instance} loading from section: {section_key}")
+                cache = unified_cache.get(section_key, {})
+                
+                if not cache:
+                    print(f"[DEBUG] Instance {self.current_instance}: Section {section_key} is empty!")
+                else:
+                    print(f"[DEBUG] Instance {self.current_instance}: Loaded config with keys: {list(cache.keys())}")
                 
                 # Load UDP configurations
                 self.main_scanner_config = cache.get('main_scanner_config')
                 self.ondemand_scanner_config = cache.get('ondemand_scanner_config')
                 self.output_config = cache.get('output_config')
+                
+                print(f"[DEBUG] Instance {self.current_instance} main_scanner_config: {self.main_scanner_config}")
+                print(f"[DEBUG] Instance {self.current_instance} output_config: {self.output_config}")
                 
                 # Backward compatibility: Handle old serial cache format
                 # If UDP configs don't exist but old serial configs do, initialize as None
@@ -311,25 +340,86 @@ class AppState(QObject):
                 self.scan_direction = cache.get('scan_direction', 'top_to_bottom')
                 
                 # Load card type from cache
-                cached_card_type = cache.get('card_type')
-                if cached_card_type and not hasattr(self, '_card_type_set_by_user'):
-                    self.card_type = CardType.from_string(cached_card_type)
+                card_type_str = cache.get('card_type', 'half')
+                try:
+                    self.card_type = CardType(card_type_str)
+                except ValueError:
+                    self.card_type = CardType.HALF
                 
-                # Don't auto-load files - just clear the path since file isn't loaded
-                # User must manually load files with card type selection
-                selected_file_path = cache.get('selected_file_path')
-                if selected_file_path:
-                    # Clear the file path since we don't auto-load anymore
-                    self.selected_file_path = ""
+                # Load file path and sequence
+                self.selected_file_path = cache.get('selected_file_path')
+                if self.selected_file_path and os.path.exists(self.selected_file_path):
+                    self.load_file(self.selected_file_path)
                 
+                # Load log data
                 self.log_data = cache.get('log_data', [])
-                self.log_updated.emit(self.log_data)
+                
+                # Restore output configuration if it exists
+                if self.output_config:
+                    config = self.output_config
+                    self.connect_output_udp(
+                        config.get('local_ip'), config.get('local_port'),
+                        config.get('remote_ip'), config.get('remote_port')
+                    )
+                
                 self.state_changed.emit()
         except (FileNotFoundError, json.JSONDecodeError):
             pass
+    
+    def _migrate_old_cache(self):
+        """Migrate from old instance-specific cache files to unified cache"""
+        try:
+            cache_dir = user_data_dir(APP_NAME, APP_AUTHOR)
+            old_file = os.path.join(cache_dir, f"app_cache_instance_{self.current_instance}.json")
+            
+            if os.path.exists(old_file):
+                with open(old_file, 'r') as f:
+                    old_cache = json.load(f)
+                    
+                # Load from old format
+                self.main_scanner_config = old_cache.get('main_scanner_config')
+                self.ondemand_scanner_config = old_cache.get('ondemand_scanner_config')
+                self.output_config = old_cache.get('output_config')
+                self.baud_rate = old_cache.get('baud_rate', 115200)
+                self.data_bits = old_cache.get('data_bits', 8)
+                self.parity = old_cache.get('parity', 'N')
+                self.stop_bits = old_cache.get('stop_bits', 1)
+                self.timeout = old_cache.get('timeout', 1)
+                self.selected_output_format = old_cache.get('selected_output_format', "")
+                self.current_theme = old_cache.get('current_theme', "dark")
+                self.start_card_code = old_cache.get('start_card_code')
+                self.scan_direction = old_cache.get('scan_direction', 'top_to_bottom')
+                
+                card_type_str = old_cache.get('card_type', 'half')
+                try:
+                    self.card_type = CardType(card_type_str)
+                except ValueError:
+                    self.card_type = CardType.HALF
+                
+                self.selected_file_path = old_cache.get('selected_file_path')
+                if self.selected_file_path and os.path.exists(self.selected_file_path):
+                    self.load_file(self.selected_file_path)
+                
+                self.log_data = old_cache.get('log_data', [])
+                
+                if self.output_config:
+                    config = self.output_config
+                    self.connect_output_udp(
+                        config.get('local_ip'), config.get('local_port'),
+                        config.get('remote_ip'), config.get('remote_port')
+                    )
+                
+                # Save to new unified format
+                self.save_cache()
+                
+                print(f"Migrated cache from {old_file} to unified cache")
+        except Exception as e:
+            print(f"Warning: Could not migrate old cache: {e}")
 
     def save_cache(self):
-        cache_data = {
+        """Save cache to unified cache file with separate sections for each head"""
+        # Prepare this instance's data
+        instance_data = {
             'card_type': self.card_type.value,
             'main_scanner_config': self.main_scanner_config,
             'ondemand_scanner_config': self.ondemand_scanner_config,
@@ -346,9 +436,34 @@ class AppState(QObject):
             'log_data': self.log_data,
             'current_theme': self.current_theme
         }
-        cache_file_path = get_cache_file_path()
+        
+        # Get unified cache file path
+        cache_file_path = get_unified_cache_file_path()
+        
+        print(f"[DEBUG] Instance {self.current_instance} saving to: {cache_file_path}")
+        
         try:
-            atomic_write_cache(cache_file_path, cache_data)
+            # Load existing unified cache or create new one
+            if os.path.exists(cache_file_path):
+                with open(cache_file_path, 'r') as f:
+                    unified_cache = json.load(f)
+                print(f"[DEBUG] Instance {self.current_instance}: Loaded existing unified cache with sections: {list(unified_cache.keys())}")
+            else:
+                unified_cache = {}
+                print(f"[DEBUG] Instance {self.current_instance}: Creating new unified cache")
+            
+            # Update this instance's section
+            section_key = f"head_{'a' if self.current_instance == 1 else 'b'}"
+            unified_cache[section_key] = instance_data
+            
+            print(f"[DEBUG] Instance {self.current_instance}: Saving to section {section_key}")
+            print(f"[DEBUG] Instance {self.current_instance}: main_scanner_config = {self.main_scanner_config}")
+            
+            # Save unified cache
+            atomic_write_cache(cache_file_path, unified_cache)
+            
+            print(f"[DEBUG] Instance {self.current_instance}: Cache saved successfully")
+            
         except Exception as e:
             print(f"Warning: Failed to save cache: {e}")
         
@@ -592,6 +707,7 @@ class AppState(QObject):
         if not port:
             self.start_card_scan_port = None
             self.ondemand_port_reader = None
+            self.ondemand_scanner_config = None
             self.ondemand_scan_status_update.emit("Not Connected", "red")
             self.state_changed.emit()
             self.save_cache()
@@ -616,6 +732,17 @@ class AppState(QObject):
         )
         
         self.start_card_scan_port = port
+        
+        # Save configuration to cache
+        self.ondemand_scanner_config = {
+            'port': port,
+            'baudrate': baudrate,
+            'bytesize': bytesize,
+            'parity': parity,
+            'stopbits': stopbits,
+            'timeout': timeout
+        }
+        
         self.ondemand_port_reader.start_reading()
         self.ondemand_scan_status_update.emit(f"Connected to {port}", "green")
         self.state_changed.emit()

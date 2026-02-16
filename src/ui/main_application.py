@@ -6,9 +6,9 @@ from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QRect, QParallelA
 from PyQt6.QtGui import QPixmap, QScreen
 
 from ..app_state import AppState
-from .network_setup import NetworkSetupWindow
-from .file_management import FileManagementWindow
-from .scanner_logging import ScannerLoggingWindow
+from .network_setup_dual import NetworkSetupWindow
+from .file_management_dual import FileManagementWindow
+from .scanner_logging_dual import ScannerLoggingDualWindow
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
 from .widgets import ClockWidget, ScalableLabel
 import constants
@@ -24,12 +24,12 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 class HomePage(QMainWindow):
-    def __init__(self, app_state):
+    def __init__(self, dual_head_manager):
         super().__init__()
-        self.app_state = app_state
-        self.setWindowTitle("Card Sequence Validation System")
-
-        
+        self.dual_head_manager = dual_head_manager
+        self.head_a = dual_head_manager.head_a
+        self.head_b = dual_head_manager.head_b
+        self.setWindowTitle("Card Sequence Validation System - Dual Head")
 
         self.com_port_window = None
         self.file_management_window = None
@@ -80,14 +80,16 @@ class HomePage(QMainWindow):
             widget.setGraphicsEffect(opacity_effect)
             widget.setAutoFillBackground(True)
 
-        self.app_state.state_changed.connect(self.update_status_indicators)
-        self.app_state.state_changed.connect(self.update_instance_button_state)
-        self.app_state.output_com_status_changed.connect(self.update_output_port_status)
+        # Connect signals from both heads
+        self.head_a.state_changed.connect(self.update_status_indicators)
+        self.head_b.state_changed.connect(self.update_status_indicators)
+        self.head_a.output_com_status_changed.connect(lambda msg, color: self.update_output_port_status('A', msg, color))
+        self.head_b.output_com_status_changed.connect(lambda msg, color: self.update_output_port_status('B', msg, color))
         
         self.update_status_indicators()
 
-        # Apply initial theme after app_state is ready (and cache is loaded)
-        self.apply_theme(self.app_state.current_theme)
+        # Apply initial theme from Head A (both heads share theme)
+        self.apply_theme(self.head_a.current_theme)
 
         # Perform license validation
         self.check_license()
@@ -207,108 +209,35 @@ class HomePage(QMainWindow):
 
         title_layout = QVBoxLayout()
         title_layout.setSpacing(0)
-        title = QLabel("Card Sequence Validator")
+        title = QLabel("Card Sequence Validator - Dual Head")
         title.setObjectName("mainTitle")
-        subtitle = QLabel("Automated Quality Control")
+        subtitle = QLabel("Automated Quality Control - Head A & Head B")
         subtitle.setObjectName("mainSubtitle")
         title_layout.addWidget(title)
         title_layout.addWidget(subtitle)
 
         clock = ClockWidget()
 
-        # Instance Selector - Toggle Button Style
-        instance_layout = QVBoxLayout()
-        instance_layout.setSpacing(3)
-        instance_label = QLabel("Instance")
-        instance_label.setObjectName("subtitle")
-        instance_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        self.instance_button_group = QButtonGroup()
-        instance_button_layout = QHBoxLayout()
-        instance_button_layout.setSpacing(2)
-        
-        for instance_num in [1, 2]:
-            btn = QPushButton(f"Instance {instance_num}")
-            btn.setCheckable(True)
-            btn.setObjectName("instanceToggle")
-            btn.setMaximumWidth(110)
-            btn.setMinimumHeight(32)
-            if instance_num == self.app_state.current_instance:
-                btn.setChecked(True)
-            btn.clicked.connect(lambda checked, num=instance_num: self.switch_instance(num))
-            self.instance_button_group.addButton(btn, instance_num)
-            instance_button_layout.addWidget(btn)
-        
-        instance_layout.addWidget(instance_label)
-        instance_layout.addLayout(instance_button_layout)
-
         # Theme Toggle Button
-        self.theme_button = QPushButton() # Initialize without text
+        self.theme_button = QPushButton()
         self.theme_button.clicked.connect(self.toggle_theme)
-
-        # Set initial text and objectName based on current_theme
-        # This will be updated by update_theme_button_text after initial theme is applied
-        self.update_theme_button_text(self.app_state.current_theme)
-
+        self.update_theme_button_text(self.head_a.current_theme)
 
         header_layout.addWidget(self.header_logo_placeholder, 0)
-        header_layout.addLayout(title_layout, 1)  # Add stretch factor
+        header_layout.addLayout(title_layout, 1)
         header_layout.addStretch()
         header_layout.addWidget(clock)
-        header_layout.addLayout(instance_layout)
         header_layout.addWidget(self.theme_button)
 
     def update_theme_button_text(self, theme_name):
         if theme_name == "dark":
             self.theme_button.setText("Light Mode")
-            self.theme_button.setObjectName("light_theme_toggle") # New objectName for light theme button style
+            self.theme_button.setObjectName("light_theme_toggle")
         else:
             self.theme_button.setText("Dark Mode")
-            self.theme_button.setObjectName("dark_theme_toggle") # New objectName for dark theme button style
+            self.theme_button.setObjectName("dark_theme_toggle")
         self.theme_button.style().unpolish(self.theme_button)
         self.theme_button.style().polish(self.theme_button)
-
-    def switch_instance(self, instance_num):
-        """Switch to a different instance and reload its data"""
-        # Prevent switching if scanning is active
-        if self.app_state.is_scanning:
-            QMessageBox.warning(
-                self,
-                "Cannot Switch Instance",
-                "Instance cannot be changed while scanning is active.\n\nStop the validation first to switch instances."
-            )
-            # Revert the button to the current instance
-            current_btn = self.instance_button_group.button(self.app_state.current_instance)
-            if current_btn:
-                current_btn.setChecked(True)
-            return
-        
-        if instance_num == self.app_state.current_instance:
-            return  # Already on this instance
-        
-        # Save current instance data
-        self.app_state.save_cache()
-        
-        # Switch instance
-        from src.app_state import set_current_instance
-        set_current_instance(instance_num)
-        self.app_state.current_instance = instance_num
-        
-        # Reload data for new instance
-        self.app_state.load_cache()
-        
-        # Update UI to reflect new instance data
-        self.update_status_indicators()
-        self.app_state.state_changed.emit()
-        
-        # Show confirmation
-        QMessageBox.information(self, "Instance Switched", f"Switched to Instance {instance_num}")
-
-    def update_instance_button_state(self):
-        """Enable/disable instance buttons based on scanning status"""
-        is_scanning = self.app_state.is_scanning
-        for btn in self.instance_button_group.buttons():
-            btn.setEnabled(not is_scanning)
 
     def create_welcome_section(self, container):
         layout = QVBoxLayout(container)
@@ -379,26 +308,67 @@ class HomePage(QMainWindow):
         status_frame.setObjectName("panel")
         status_layout = QVBoxLayout(status_frame)
         status_layout.setContentsMargins(25, 20, 25, 20)
-        status_title = QLabel("System Status")
+        status_title = QLabel("System Status - Dual Head Operation")
         status_title.setObjectName("h2")
 
-        indicators_layout = QHBoxLayout()
-        indicators_layout.setSpacing(30)
+        # Create two rows: one for Head A, one for Head B
+        main_indicators_layout = QVBoxLayout()
+        main_indicators_layout.setSpacing(20)
+        
+        # Head A Status Row
+        head_a_label = QLabel("Head A (Right)")
+        head_a_label.setObjectName("h2")
+        head_a_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        main_indicators_layout.addWidget(head_a_label)
+        
+        head_a_indicators = QHBoxLayout()
+        head_a_indicators.setSpacing(30)
+        
+        self.scanner_status_label_a = QLabel()
+        self.file_status_label_a = QLabel()
+        self.com_status_label_a = QLabel()
+        self.output_com_status_label_a = QLabel()
+        self.scan_card_com_status_label_a = QLabel()
 
-        self.scanner_status_label = QLabel()
-        self.file_status_label = QLabel()
-        self.com_status_label = QLabel()
-        self.output_com_status_label = QLabel()
-        self.scan_card_com_status_label = QLabel()
+        head_a_indicators.addWidget(self.create_status_indicator("Scanner:", self.scanner_status_label_a), 1)
+        head_a_indicators.addWidget(self.create_status_indicator("Input Port:", self.com_status_label_a), 1)
+        head_a_indicators.addWidget(self.create_status_indicator("Output Port:", self.output_com_status_label_a), 1)
+        head_a_indicators.addWidget(self.create_status_indicator("Scan Card Port:", self.scan_card_com_status_label_a), 1)
+        head_a_indicators.addWidget(self.create_status_indicator("File Loaded:", self.file_status_label_a), 1)
+        
+        main_indicators_layout.addLayout(head_a_indicators)
+        
+        # Separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setStyleSheet("background-color: #444; margin: 10px 0;")
+        main_indicators_layout.addWidget(separator)
+        
+        # Head B Status Row
+        head_b_label = QLabel("Head B (Left)")
+        head_b_label.setObjectName("h2")
+        head_b_label.setStyleSheet("color: #2196F3; font-weight: bold;")
+        main_indicators_layout.addWidget(head_b_label)
+        
+        head_b_indicators = QHBoxLayout()
+        head_b_indicators.setSpacing(30)
+        
+        self.scanner_status_label_b = QLabel()
+        self.file_status_label_b = QLabel()
+        self.com_status_label_b = QLabel()
+        self.output_com_status_label_b = QLabel()
+        self.scan_card_com_status_label_b = QLabel()
 
-        indicators_layout.addWidget(self.create_status_indicator("Scanner:", self.scanner_status_label), 1)
-        indicators_layout.addWidget(self.create_status_indicator("Input Port:", self.com_status_label), 1)
-        indicators_layout.addWidget(self.create_status_indicator("Output Port:", self.output_com_status_label), 1)
-        indicators_layout.addWidget(self.create_status_indicator("Scan Card Port:", self.scan_card_com_status_label), 1)
-        indicators_layout.addWidget(self.create_status_indicator("File Loaded:", self.file_status_label), 1)
+        head_b_indicators.addWidget(self.create_status_indicator("Scanner:", self.scanner_status_label_b), 1)
+        head_b_indicators.addWidget(self.create_status_indicator("Input Port:", self.com_status_label_b), 1)
+        head_b_indicators.addWidget(self.create_status_indicator("Output Port:", self.output_com_status_label_b), 1)
+        head_b_indicators.addWidget(self.create_status_indicator("Scan Card Port:", self.scan_card_com_status_label_b), 1)
+        head_b_indicators.addWidget(self.create_status_indicator("File Loaded:", self.file_status_label_b), 1)
+        
+        main_indicators_layout.addLayout(head_b_indicators)
 
         status_layout.addWidget(status_title)
-        status_layout.addLayout(indicators_layout)
+        status_layout.addLayout(main_indicators_layout)
         layout.addWidget(status_frame)
 
     def create_status_indicator(self, label_text, status_widget):
@@ -412,77 +382,120 @@ class HomePage(QMainWindow):
         return container
 
     def update_status_indicators(self):
-        if self.app_state.is_scanning:
-            self.scanner_status_label.setText("Scanning")
-            self.scanner_status_label.setObjectName("statusOK")
+        # Update Head A status
+        if self.head_a.is_scanning:
+            self.scanner_status_label_a.setText("Scanning")
+            self.scanner_status_label_a.setObjectName("statusOK")
         else:
-            self.scanner_status_label.setText("Idle")
-            self.scanner_status_label.setObjectName("statusIdle")
+            self.scanner_status_label_a.setText("Idle")
+            self.scanner_status_label_a.setObjectName("statusIdle")
 
-        if self.app_state.selected_file_path:
-            file_name = os.path.basename(self.app_state.selected_file_path)
-            self.file_status_label.setText(f"{file_name} ({len(self.app_state.expected_cards)} cards)")
-            self.file_status_label.setObjectName("statusOK")
+        if self.head_a.selected_file_path:
+            file_name = os.path.basename(self.head_a.selected_file_path)
+            self.file_status_label_a.setText(f"{file_name} ({len(self.head_a.expected_cards)} cards)")
+            self.file_status_label_a.setObjectName("statusOK")
         else:
-            self.file_status_label.setText("No File")
-            self.file_status_label.setObjectName("statusWarning")
+            self.file_status_label_a.setText("No File")
+            self.file_status_label_a.setObjectName("statusWarning")
 
-        if self.app_state.main_scanner_config:
-            config = self.app_state.main_scanner_config
-            self.com_status_label.setText(f"{config['local_ip']}:{config['local_port']}")
-            self.com_status_label.setObjectName("statusOK")
+        if self.head_a.main_scanner_config:
+            config = self.head_a.main_scanner_config
+            self.com_status_label_a.setText(f"{config['local_ip']}:{config['local_port']}")
+            self.com_status_label_a.setObjectName("statusOK")
         else:
-            self.com_status_label.setText("Not Set")
-            self.com_status_label.setObjectName("statusWarning")
+            self.com_status_label_a.setText("Not Set")
+            self.com_status_label_a.setObjectName("statusWarning")
 
-        if self.app_state.output_config:
-            config = self.app_state.output_config
-            self.output_com_status_label.setText(f"{config['remote_ip']}:{config['remote_port']}")
-            self.output_com_status_label.setObjectName("statusOK")
+        if self.head_a.output_config:
+            config = self.head_a.output_config
+            self.output_com_status_label_a.setText(f"{config['remote_ip']}:{config['remote_port']}")
+            self.output_com_status_label_a.setObjectName("statusOK")
         else:
-            self.output_com_status_label.setText("Not Set")
-            self.output_com_status_label.setObjectName("statusWarning")
+            self.output_com_status_label_a.setText("Not Set")
+            self.output_com_status_label_a.setObjectName("statusWarning")
 
-        # Update scan card port status
-        if self.app_state.ondemand_scanner_config:
-            config = self.app_state.ondemand_scanner_config
-            self.scan_card_com_status_label.setText(f"{config['local_ip']}:{config['local_port']}")
-            self.scan_card_com_status_label.setObjectName("statusOK")
+        if self.head_a.ondemand_scanner_config:
+            config = self.head_a.ondemand_scanner_config
+            self.scan_card_com_status_label_a.setText(f"{config['local_ip']}:{config['local_port']}")
+            self.scan_card_com_status_label_a.setObjectName("statusOK")
         else:
-            self.scan_card_com_status_label.setText("Not Set")
-            self.scan_card_com_status_label.setObjectName("statusWarning")
+            self.scan_card_com_status_label_a.setText("Not Set")
+            self.scan_card_com_status_label_a.setObjectName("statusWarning")
 
-        self.scanner_status_label.style().unpolish(self.scanner_status_label)
-        self.scanner_status_label.style().polish(self.scanner_status_label)
-        self.file_status_label.style().unpolish(self.file_status_label)
-        self.file_status_label.style().polish(self.file_status_label)
-        self.com_status_label.style().unpolish(self.com_status_label)
-        self.com_status_label.style().polish(self.com_status_label)
-        self.output_com_status_label.style().unpolish(self.output_com_status_label)
-        self.output_com_status_label.style().polish(self.output_com_status_label)
-        self.scan_card_com_status_label.style().unpolish(self.scan_card_com_status_label)
-        self.scan_card_com_status_label.style().polish(self.scan_card_com_status_label)
+        # Update Head B status
+        if self.head_b.is_scanning:
+            self.scanner_status_label_b.setText("Scanning")
+            self.scanner_status_label_b.setObjectName("statusOK")
+        else:
+            self.scanner_status_label_b.setText("Idle")
+            self.scanner_status_label_b.setObjectName("statusIdle")
 
-    def update_output_port_status(self, message, color):
-        """Update output port status in real-time"""
-        if self.app_state.output_config:
-            config = self.app_state.output_config
-            self.output_com_status_label.setText(f"{config['remote_ip']}:{config['remote_port']}")
-            self.output_com_status_label.setObjectName("statusOK")
+        if self.head_b.selected_file_path:
+            file_name = os.path.basename(self.head_b.selected_file_path)
+            self.file_status_label_b.setText(f"{file_name} ({len(self.head_b.expected_cards)} cards)")
+            self.file_status_label_b.setObjectName("statusOK")
+        else:
+            self.file_status_label_b.setText("No File")
+            self.file_status_label_b.setObjectName("statusWarning")
+
+        if self.head_b.main_scanner_config:
+            config = self.head_b.main_scanner_config
+            self.com_status_label_b.setText(f"{config['local_ip']}:{config['local_port']}")
+            self.com_status_label_b.setObjectName("statusOK")
+        else:
+            self.com_status_label_b.setText("Not Set")
+            self.com_status_label_b.setObjectName("statusWarning")
+
+        if self.head_b.output_config:
+            config = self.head_b.output_config
+            self.output_com_status_label_b.setText(f"{config['remote_ip']}:{config['remote_port']}")
+            self.output_com_status_label_b.setObjectName("statusOK")
+        else:
+            self.output_com_status_label_b.setText("Not Set")
+            self.output_com_status_label_b.setObjectName("statusWarning")
+
+        if self.head_b.ondemand_scanner_config:
+            config = self.head_b.ondemand_scanner_config
+            self.scan_card_com_status_label_b.setText(f"{config['local_ip']}:{config['local_port']}")
+            self.scan_card_com_status_label_b.setObjectName("statusOK")
+        else:
+            self.scan_card_com_status_label_b.setText("Not Set")
+            self.scan_card_com_status_label_b.setObjectName("statusWarning")
+
+        # Re-polish all status labels
+        for label in [self.scanner_status_label_a, self.file_status_label_a, self.com_status_label_a,
+                     self.output_com_status_label_a, self.scan_card_com_status_label_a,
+                     self.scanner_status_label_b, self.file_status_label_b, self.com_status_label_b,
+                     self.output_com_status_label_b, self.scan_card_com_status_label_b]:
+            label.style().unpolish(label)
+            label.style().polish(label)
+
+    def update_output_port_status(self, head_id, message, color):
+        """Update output port status in real-time for specified head"""
+        if head_id == 'A':
+            head = self.head_a
+            label = self.output_com_status_label_a
+        else:
+            head = self.head_b
+            label = self.output_com_status_label_b
+            
+        if head.output_config:
+            config = head.output_config
+            label.setText(f"{config['remote_ip']}:{config['remote_port']}")
+            label.setObjectName("statusOK")
         elif "Not Connected" in message or "Not Set" in message:
-            self.output_com_status_label.setText("Not Set")
-            self.output_com_status_label.setObjectName("statusWarning")
+            label.setText("Not Set")
+            label.setObjectName("statusWarning")
         else:
-            # Error message
-            self.output_com_status_label.setText("Error")
-            self.output_com_status_label.setObjectName("statusError")
+            label.setText("Error")
+            label.setObjectName("statusError")
         
-        self.output_com_status_label.style().unpolish(self.output_com_status_label)
-        self.output_com_status_label.style().polish(self.output_com_status_label)
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     def open_scanner(self):
         if self.scanner_logging_window is None:
-            self.scanner_logging_window = ScannerLoggingWindow(self.app_state)
+            self.scanner_logging_window = ScannerLoggingDualWindow(self.dual_head_manager)
         if self.scanner_logging_window.isMinimized():
             self.scanner_logging_window.showNormal()
         self.scanner_logging_window.showMaximized()
@@ -491,7 +504,7 @@ class HomePage(QMainWindow):
 
     def open_com_port_setup(self):
         if self.com_port_window is None:
-            self.com_port_window = NetworkSetupWindow(self.app_state)
+            self.com_port_window = NetworkSetupWindow(self.dual_head_manager)
         if self.com_port_window.isMinimized():
             self.com_port_window.showNormal()
         self.com_port_window.showMaximized()
@@ -500,7 +513,7 @@ class HomePage(QMainWindow):
 
     def open_file_management(self):
         if self.file_management_window is None:
-            self.file_management_window = FileManagementWindow(self.app_state, self.open_scanner)
+            self.file_management_window = FileManagementWindow(self.dual_head_manager, self.open_scanner)
         if self.file_management_window.isMinimized():
             self.file_management_window.showNormal()
         self.file_management_window.showMaximized()
@@ -508,22 +521,24 @@ class HomePage(QMainWindow):
         self.file_management_window.activateWindow()
 
     def closeEvent(self, event):
-        self.app_state.stop_scanning()
-        self.app_state.save_cache()
+        self.dual_head_manager.stop_all_scanning()
+        self.dual_head_manager.save_all()
         QApplication.quit()
 
     def toggle_theme(self):
         if self.current_theme == "dark":
             self.current_theme = "light"
             self.theme_button.setText("Dark Mode")
-            self.theme_button.setObjectName("dark_theme_toggle") # Apply dark theme button style
+            self.theme_button.setObjectName("dark_theme_toggle")
         else:
             self.current_theme = "dark"
             self.theme_button.setText("Light Mode")
-            self.theme_button.setObjectName("light_theme_toggle") # Apply light theme button style
+            self.theme_button.setObjectName("light_theme_toggle")
 
         self.apply_theme(self.current_theme)
-        self.app_state.set_theme(self.current_theme) # Save theme to app_state
+        # Save theme to both heads
+        self.head_a.set_theme(self.current_theme)
+        self.head_b.set_theme(self.current_theme)
 
     def apply_theme(self, theme_name):
         if theme_name == "dark":
