@@ -25,7 +25,7 @@ APP_AUTHOR = "YourCompany"
 
 # Global instance tracker
 _current_instance = 1
-_cache_lock = threading.Lock()  # Lock for cache file access
+_cache_lock = threading.RLock()  # RLock for reentrant locking (same thread can acquire multiple times)
 
 def set_current_instance(instance_num):
     """Set the current instance (1 or 2)"""
@@ -297,8 +297,6 @@ class AppState(QObject):
                 # Use unified cache file
                 cache_file = get_unified_cache_file_path()
                 
-                print(f"[DEBUG] Instance {self.current_instance} loading from: {cache_file}")
-                
                 if not os.path.exists(cache_file):
                     # Try to migrate from old instance-specific files
                     print(f"[DEBUG] Instance {self.current_instance}: Unified cache not found, trying migration")
@@ -308,25 +306,14 @@ class AppState(QObject):
                 with open(cache_file, 'r') as f:
                     unified_cache = json.load(f)
                     
-                    print(f"[DEBUG] Instance {self.current_instance}: Full unified cache = {json.dumps(unified_cache, indent=2)}")
-                    
                     # Get this instance's section (head_a or head_b)
                     section_key = f"head_{'a' if self.current_instance == 1 else 'b'}"
-                    print(f"[DEBUG] Instance {self.current_instance} loading from section: {section_key}")
                     cache = unified_cache.get(section_key, {})
-                    
-                    if not cache:
-                        print(f"[DEBUG] Instance {self.current_instance}: Section {section_key} is empty!")
-                    else:
-                        print(f"[DEBUG] Instance {self.current_instance}: Loaded config with keys: {list(cache.keys())}")
                     
                     # Load UDP configurations
                     self.main_scanner_config = cache.get('main_scanner_config')
                     self.ondemand_scanner_config = cache.get('ondemand_scanner_config')
                     self.output_config = cache.get('output_config')
-                    
-                    print(f"[DEBUG] Instance {self.current_instance} main_scanner_config: {self.main_scanner_config}")
-                    print(f"[DEBUG] Instance {self.current_instance} output_config: {self.output_config}")
                     
                     # Backward compatibility: Handle old serial cache format
                     # If UDP configs don't exist but old serial configs do, initialize as None
@@ -359,7 +346,11 @@ class AppState(QObject):
                     # Load file path and sequence
                     self.selected_file_path = cache.get('selected_file_path')
                     if self.selected_file_path and os.path.exists(self.selected_file_path):
-                        self.load_file(self.selected_file_path)
+                        try:
+                            self.load_file(self.selected_file_path)
+                        except Exception as file_error:
+                            print(f"[DEBUG] Instance {self.current_instance}: Error loading file: {file_error}")
+                            self.selected_file_path = ""
                     
                     # Load log data
                     self.log_data = cache.get('log_data', [])
@@ -367,13 +358,17 @@ class AppState(QObject):
                     # Restore output configuration if it exists
                     if self.output_config:
                         config = self.output_config
-                        self.connect_output_udp(
-                            config.get('local_ip'), config.get('local_port'),
-                            config.get('remote_ip'), config.get('remote_port')
-                        )
+                        try:
+                            self.connect_output_udp(
+                                config.get('local_ip'), config.get('local_port'),
+                                config.get('remote_ip'), config.get('remote_port')
+                            )
+                        except Exception as udp_error:
+                            print(f"[DEBUG] Instance {self.current_instance}: Error connecting output UDP: {udp_error}")
                     
                     self.state_changed.emit()
-            except (FileNotFoundError, json.JSONDecodeError):
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                print(f"[DEBUG] Instance {self.current_instance}: Error loading cache: {e}")
                 pass
     
     def _migrate_old_cache(self):
@@ -408,16 +403,23 @@ class AppState(QObject):
                 
                 self.selected_file_path = old_cache.get('selected_file_path')
                 if self.selected_file_path and os.path.exists(self.selected_file_path):
-                    self.load_file(self.selected_file_path)
+                    try:
+                        self.load_file(self.selected_file_path)
+                    except Exception as file_error:
+                        print(f"[DEBUG] Instance {self.current_instance}: Error loading file during migration: {file_error}")
+                        self.selected_file_path = ""
                 
                 self.log_data = old_cache.get('log_data', [])
                 
                 if self.output_config:
                     config = self.output_config
-                    self.connect_output_udp(
-                        config.get('local_ip'), config.get('local_port'),
-                        config.get('remote_ip'), config.get('remote_port')
-                    )
+                    try:
+                        self.connect_output_udp(
+                            config.get('local_ip'), config.get('local_port'),
+                            config.get('remote_ip'), config.get('remote_port')
+                        )
+                    except Exception as udp_error:
+                        print(f"[DEBUG] Instance {self.current_instance}: Error connecting output UDP during migration: {udp_error}")
                 
                 # Save to new unified format
                 self.save_cache()
@@ -452,35 +454,26 @@ class AppState(QObject):
             # Get unified cache file path
             cache_file_path = get_unified_cache_file_path()
             
-            print(f"[DEBUG] Instance {self.current_instance} saving to: {cache_file_path}")
-            
             try:
                 # Load existing unified cache or create new one
                 if os.path.exists(cache_file_path):
                     with open(cache_file_path, 'r') as f:
                         unified_cache = json.load(f)
-                    print(f"[DEBUG] Instance {self.current_instance}: Loaded existing unified cache with sections: {list(unified_cache.keys())}")
                 else:
                     unified_cache = {}
-                    print(f"[DEBUG] Instance {self.current_instance}: Creating new unified cache")
                 
                 # Update this instance's section
                 section_key = f"head_{'a' if self.current_instance == 1 else 'b'}"
                 unified_cache[section_key] = instance_data
-                
-                print(f"[DEBUG] Instance {self.current_instance}: Saving to section {section_key}")
-                print(f"[DEBUG] Instance {self.current_instance}: main_scanner_config = {self.main_scanner_config}")
                 
                 # Save unified cache with retry logic
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
                         atomic_write_cache(cache_file_path, unified_cache)
-                        print(f"[DEBUG] Instance {self.current_instance}: Cache saved successfully")
                         break
                     except PermissionError as e:
                         if attempt < max_retries - 1:
-                            print(f"[DEBUG] Instance {self.current_instance}: Retry {attempt + 1}/{max_retries} after permission error")
                             time.sleep(0.1)  # Wait 100ms before retry
                         else:
                             raise

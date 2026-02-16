@@ -4,7 +4,7 @@ customtkinter
 pyserial
 cryptography
 pyarmor       # Serial communication for COM port handling
-cryptography
+appdirs       # Cross-platform application data directory
 # Note: The following dependencies were removed as they are not used in the application:
 # - numpy, pandas: Not imported anywhere in the codebase
 # - pillow: Only used for logo loading, but PyQt6 handles image loading internally

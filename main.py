@@ -27,10 +27,14 @@ if __name__ == "__main__":
     # Create dual-head manager for simultaneous operation of Head A and Head B
     from src.dual_head_manager import DualHeadManager
     
+    print("[DEBUG] main.py: Creating DualHeadManager")
     dual_head_manager = DualHeadManager()
+    print("[DEBUG] main.py: DualHeadManager created, creating HomePage")
 
     # Create and show the main window, passing the DualHeadManager to it
     window = HomePage(dual_head_manager)
+    print("[DEBUG] main.py: HomePage created, showing window")
     window.showMaximized()
+    print("[DEBUG] main.py: Window shown, starting event loop")
 
     sys.exit(app.exec())
