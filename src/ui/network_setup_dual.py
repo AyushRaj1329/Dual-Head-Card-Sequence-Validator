@@ -547,8 +547,14 @@ class NetworkSetupWindow(QMainWindow):
         self.validate_and_clean_cache(self.head_a)
         self.validate_and_clean_cache(self.head_b)
         
+        print(f"[DEBUG] update_ui_from_state called")
+        print(f"[DEBUG] Head A (Instance {self.head_a.current_instance}) main_scanner_config: {self.head_a.main_scanner_config}")
+        print(f"[DEBUG] Head B (Instance {self.head_b.current_instance}) main_scanner_config: {self.head_b.main_scanner_config}")
+        
         for head_id in ['A', 'B']:
             head = self.head_a if head_id == 'A' else self.head_b
+            
+            print(f"[DEBUG] Loading UI for Head {head_id} from instance {head.current_instance}")
             
             # Main scanner
             if head.main_scanner_config:
@@ -557,6 +563,12 @@ class NetworkSetupWindow(QMainWindow):
                 local_port = config.get('local_port', '')
                 remote_ip = config.get('remote_ip', '')
                 remote_port = config.get('remote_port', '')
+                
+                print(f"[DEBUG] Head {head_id} setting UI fields:")
+                print(f"  main_local_ip_{head_id} = {local_ip}")
+                print(f"  main_local_port_{head_id} = {local_port}")
+                print(f"  main_remote_ip_{head_id} = {remote_ip}")
+                print(f"  main_remote_port_{head_id} = {remote_port}")
                 
                 # Only set if values are valid strings/numbers
                 if local_ip and isinstance(local_ip, str):
@@ -614,6 +626,14 @@ class NetworkSetupWindow(QMainWindow):
             local_port = getattr(self, f'main_local_port_{head_id}').currentText().strip()
             remote_ip = getattr(self, f'main_remote_ip_{head_id}').currentText().strip()
             remote_port = getattr(self, f'main_remote_port_{head_id}').currentText().strip()
+            
+            # Debug: Show what values are being read from UI
+            print(f"[DEBUG] apply_main_scanner for Head {head_id}:")
+            print(f"  Reading from UI field 'main_local_ip_{head_id}': {local_ip}")
+            print(f"  Reading from UI field 'main_local_port_{head_id}': {local_port}")
+            print(f"  Reading from UI field 'main_remote_ip_{head_id}': {remote_ip}")
+            print(f"  Reading from UI field 'main_remote_port_{head_id}': {remote_port}")
+            print(f"  Head instance: {head.current_instance}")
             
             # Check if settings are being changed while connected
             if head.main_scanner_config:

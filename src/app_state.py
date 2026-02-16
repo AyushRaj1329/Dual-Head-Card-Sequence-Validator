@@ -25,6 +25,7 @@ APP_AUTHOR = "YourCompany"
 
 # Global instance tracker
 _current_instance = 1
+_cache_lock = threading.Lock()  # Lock for cache file access
 
 def set_current_instance(instance_num):
     """Set the current instance (1 or 2)"""
@@ -208,6 +209,10 @@ class AppState(QObject):
 
     def __init__(self, card_type=CardType.HALF):
         super().__init__()
+        
+        print(f"[DEBUG] AppState.__init__ called with card_type={card_type}")
+        print(f"[DEBUG] AppState.__init__: get_current_instance() = {get_current_instance()}")
+        
         self.card_type = card_type
         self.main_port_reader = None
         self.ondemand_port_reader = None
@@ -215,6 +220,7 @@ class AppState(QObject):
 
         # Instance tracking
         self.current_instance = get_current_instance()
+        print(f"[DEBUG] AppState.__init__: self.current_instance = {self.current_instance}")
 
         # UDP Configuration (replaces COM port configuration)
         self.main_scanner_config = None  # {'local_ip': str, 'local_port': int, 'remote_ip': str, 'remote_port': int}
@@ -285,86 +291,90 @@ class AppState(QObject):
 
     def load_cache(self):
         """Load cache from unified cache file"""
-        try:
-            # Use unified cache file
-            cache_file = get_unified_cache_file_path()
-            
-            print(f"[DEBUG] Instance {self.current_instance} loading from: {cache_file}")
-            
-            if not os.path.exists(cache_file):
-                # Try to migrate from old instance-specific files
-                print(f"[DEBUG] Instance {self.current_instance}: Unified cache not found, trying migration")
-                self._migrate_old_cache()
-                return
-            
-            with open(cache_file, 'r') as f:
-                unified_cache = json.load(f)
+        # Use lock to prevent concurrent access
+        with _cache_lock:
+            try:
+                # Use unified cache file
+                cache_file = get_unified_cache_file_path()
                 
-                # Get this instance's section (head_a or head_b)
-                section_key = f"head_{'a' if self.current_instance == 1 else 'b'}"
-                print(f"[DEBUG] Instance {self.current_instance} loading from section: {section_key}")
-                cache = unified_cache.get(section_key, {})
+                print(f"[DEBUG] Instance {self.current_instance} loading from: {cache_file}")
                 
-                if not cache:
-                    print(f"[DEBUG] Instance {self.current_instance}: Section {section_key} is empty!")
-                else:
-                    print(f"[DEBUG] Instance {self.current_instance}: Loaded config with keys: {list(cache.keys())}")
+                if not os.path.exists(cache_file):
+                    # Try to migrate from old instance-specific files
+                    print(f"[DEBUG] Instance {self.current_instance}: Unified cache not found, trying migration")
+                    self._migrate_old_cache()
+                    return
                 
-                # Load UDP configurations
-                self.main_scanner_config = cache.get('main_scanner_config')
-                self.ondemand_scanner_config = cache.get('ondemand_scanner_config')
-                self.output_config = cache.get('output_config')
-                
-                print(f"[DEBUG] Instance {self.current_instance} main_scanner_config: {self.main_scanner_config}")
-                print(f"[DEBUG] Instance {self.current_instance} output_config: {self.output_config}")
-                
-                # Backward compatibility: Handle old serial cache format
-                # If UDP configs don't exist but old serial configs do, initialize as None
-                if not self.main_scanner_config and 'selected_com_port' in cache:
-                    self.main_scanner_config = None
-                if not self.ondemand_scanner_config and 'start_card_scan_port' in cache:
-                    self.ondemand_scanner_config = None
-                if not self.output_config and 'selected_output_port' in cache:
-                    self.output_config = None
-                
-                # Legacy serial settings (kept for backward compatibility)
-                self.baud_rate = cache.get('baud_rate', 115200)
-                self.data_bits = cache.get('data_bits', 8)
-                self.parity = cache.get('parity', 'N')
-                self.stop_bits = cache.get('stop_bits', 1)
-                self.timeout = cache.get('timeout', 1)
-                
-                self.selected_output_format = cache.get('selected_output_format', "")
-                self.current_theme = cache.get('current_theme', "dark")
-                self.start_card_code = cache.get('start_card_code')
-                self.scan_direction = cache.get('scan_direction', 'top_to_bottom')
-                
-                # Load card type from cache
-                card_type_str = cache.get('card_type', 'half')
-                try:
-                    self.card_type = CardType(card_type_str)
-                except ValueError:
-                    self.card_type = CardType.HALF
-                
-                # Load file path and sequence
-                self.selected_file_path = cache.get('selected_file_path')
-                if self.selected_file_path and os.path.exists(self.selected_file_path):
-                    self.load_file(self.selected_file_path)
-                
-                # Load log data
-                self.log_data = cache.get('log_data', [])
-                
-                # Restore output configuration if it exists
-                if self.output_config:
-                    config = self.output_config
-                    self.connect_output_udp(
-                        config.get('local_ip'), config.get('local_port'),
-                        config.get('remote_ip'), config.get('remote_port')
-                    )
-                
-                self.state_changed.emit()
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
+                with open(cache_file, 'r') as f:
+                    unified_cache = json.load(f)
+                    
+                    print(f"[DEBUG] Instance {self.current_instance}: Full unified cache = {json.dumps(unified_cache, indent=2)}")
+                    
+                    # Get this instance's section (head_a or head_b)
+                    section_key = f"head_{'a' if self.current_instance == 1 else 'b'}"
+                    print(f"[DEBUG] Instance {self.current_instance} loading from section: {section_key}")
+                    cache = unified_cache.get(section_key, {})
+                    
+                    if not cache:
+                        print(f"[DEBUG] Instance {self.current_instance}: Section {section_key} is empty!")
+                    else:
+                        print(f"[DEBUG] Instance {self.current_instance}: Loaded config with keys: {list(cache.keys())}")
+                    
+                    # Load UDP configurations
+                    self.main_scanner_config = cache.get('main_scanner_config')
+                    self.ondemand_scanner_config = cache.get('ondemand_scanner_config')
+                    self.output_config = cache.get('output_config')
+                    
+                    print(f"[DEBUG] Instance {self.current_instance} main_scanner_config: {self.main_scanner_config}")
+                    print(f"[DEBUG] Instance {self.current_instance} output_config: {self.output_config}")
+                    
+                    # Backward compatibility: Handle old serial cache format
+                    # If UDP configs don't exist but old serial configs do, initialize as None
+                    if not self.main_scanner_config and 'selected_com_port' in cache:
+                        self.main_scanner_config = None
+                    if not self.ondemand_scanner_config and 'start_card_scan_port' in cache:
+                        self.ondemand_scanner_config = None
+                    if not self.output_config and 'selected_output_port' in cache:
+                        self.output_config = None
+                    
+                    # Legacy serial settings (kept for backward compatibility)
+                    self.baud_rate = cache.get('baud_rate', 115200)
+                    self.data_bits = cache.get('data_bits', 8)
+                    self.parity = cache.get('parity', 'N')
+                    self.stop_bits = cache.get('stop_bits', 1)
+                    self.timeout = cache.get('timeout', 1)
+                    
+                    self.selected_output_format = cache.get('selected_output_format', "")
+                    self.current_theme = cache.get('current_theme', "dark")
+                    self.start_card_code = cache.get('start_card_code')
+                    self.scan_direction = cache.get('scan_direction', 'top_to_bottom')
+                    
+                    # Load card type from cache
+                    card_type_str = cache.get('card_type', 'half')
+                    try:
+                        self.card_type = CardType(card_type_str)
+                    except ValueError:
+                        self.card_type = CardType.HALF
+                    
+                    # Load file path and sequence
+                    self.selected_file_path = cache.get('selected_file_path')
+                    if self.selected_file_path and os.path.exists(self.selected_file_path):
+                        self.load_file(self.selected_file_path)
+                    
+                    # Load log data
+                    self.log_data = cache.get('log_data', [])
+                    
+                    # Restore output configuration if it exists
+                    if self.output_config:
+                        config = self.output_config
+                        self.connect_output_udp(
+                            config.get('local_ip'), config.get('local_port'),
+                            config.get('remote_ip'), config.get('remote_port')
+                        )
+                    
+                    self.state_changed.emit()
+            except (FileNotFoundError, json.JSONDecodeError):
+                pass
     
     def _migrate_old_cache(self):
         """Migrate from old instance-specific cache files to unified cache"""
@@ -418,57 +428,68 @@ class AppState(QObject):
 
     def save_cache(self):
         """Save cache to unified cache file with separate sections for each head"""
-        # Prepare this instance's data
-        instance_data = {
-            'card_type': self.card_type.value,
-            'main_scanner_config': self.main_scanner_config,
-            'ondemand_scanner_config': self.ondemand_scanner_config,
-            'output_config': self.output_config,
-            'baud_rate': self.baud_rate,
-            'data_bits': self.data_bits,
-            'parity': self.parity,
-            'stop_bits': self.stop_bits,
-            'timeout': self.timeout,
-            'selected_output_format': self.selected_output_format,
-            'selected_file_path': self.selected_file_path,
-            'start_card_code': self.start_card_code,
-            'scan_direction': self.scan_direction,
-            'log_data': self.log_data,
-            'current_theme': self.current_theme
-        }
-        
-        # Get unified cache file path
-        cache_file_path = get_unified_cache_file_path()
-        
-        print(f"[DEBUG] Instance {self.current_instance} saving to: {cache_file_path}")
-        
-        try:
-            # Load existing unified cache or create new one
-            if os.path.exists(cache_file_path):
-                with open(cache_file_path, 'r') as f:
-                    unified_cache = json.load(f)
-                print(f"[DEBUG] Instance {self.current_instance}: Loaded existing unified cache with sections: {list(unified_cache.keys())}")
-            else:
-                unified_cache = {}
-                print(f"[DEBUG] Instance {self.current_instance}: Creating new unified cache")
+        # Use lock to prevent concurrent writes
+        with _cache_lock:
+            # Prepare this instance's data
+            instance_data = {
+                'card_type': self.card_type.value,
+                'main_scanner_config': self.main_scanner_config,
+                'ondemand_scanner_config': self.ondemand_scanner_config,
+                'output_config': self.output_config,
+                'baud_rate': self.baud_rate,
+                'data_bits': self.data_bits,
+                'parity': self.parity,
+                'stop_bits': self.stop_bits,
+                'timeout': self.timeout,
+                'selected_output_format': self.selected_output_format,
+                'selected_file_path': self.selected_file_path,
+                'start_card_code': self.start_card_code,
+                'scan_direction': self.scan_direction,
+                'log_data': self.log_data,
+                'current_theme': self.current_theme
+            }
             
-            # Update this instance's section
-            section_key = f"head_{'a' if self.current_instance == 1 else 'b'}"
-            unified_cache[section_key] = instance_data
+            # Get unified cache file path
+            cache_file_path = get_unified_cache_file_path()
             
-            print(f"[DEBUG] Instance {self.current_instance}: Saving to section {section_key}")
-            print(f"[DEBUG] Instance {self.current_instance}: main_scanner_config = {self.main_scanner_config}")
+            print(f"[DEBUG] Instance {self.current_instance} saving to: {cache_file_path}")
             
-            # Save unified cache
-            atomic_write_cache(cache_file_path, unified_cache)
+            try:
+                # Load existing unified cache or create new one
+                if os.path.exists(cache_file_path):
+                    with open(cache_file_path, 'r') as f:
+                        unified_cache = json.load(f)
+                    print(f"[DEBUG] Instance {self.current_instance}: Loaded existing unified cache with sections: {list(unified_cache.keys())}")
+                else:
+                    unified_cache = {}
+                    print(f"[DEBUG] Instance {self.current_instance}: Creating new unified cache")
+                
+                # Update this instance's section
+                section_key = f"head_{'a' if self.current_instance == 1 else 'b'}"
+                unified_cache[section_key] = instance_data
+                
+                print(f"[DEBUG] Instance {self.current_instance}: Saving to section {section_key}")
+                print(f"[DEBUG] Instance {self.current_instance}: main_scanner_config = {self.main_scanner_config}")
+                
+                # Save unified cache with retry logic
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        atomic_write_cache(cache_file_path, unified_cache)
+                        print(f"[DEBUG] Instance {self.current_instance}: Cache saved successfully")
+                        break
+                    except PermissionError as e:
+                        if attempt < max_retries - 1:
+                            print(f"[DEBUG] Instance {self.current_instance}: Retry {attempt + 1}/{max_retries} after permission error")
+                            time.sleep(0.1)  # Wait 100ms before retry
+                        else:
+                            raise
+                
+            except Exception as e:
+                print(f"Warning: Failed to save cache: {e}")
             
-            print(f"[DEBUG] Instance {self.current_instance}: Cache saved successfully")
-            
-        except Exception as e:
-            print(f"Warning: Failed to save cache: {e}")
-        
-        # Also save the current instance selection globally
-        self.save_instance_selection()
+            # Also save the current instance selection globally
+            self.save_instance_selection()
 
     def save_instance_selection(self):
         """Save the current instance selection to a global config file"""

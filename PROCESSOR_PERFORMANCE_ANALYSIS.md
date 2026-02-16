@@ -1,1 +1,0 @@
-# Card Sequence Validator - Processor Performance Analysis

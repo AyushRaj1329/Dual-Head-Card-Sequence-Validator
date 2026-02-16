@@ -21,20 +21,26 @@ class DualHeadManager(QObject):
     def __init__(self):
         super().__init__()
         
+        print("[DEBUG] DualHeadManager: Initializing...")
+        
         # Create two independent AppState instances
         # Head A = Instance 1 (Right side)
         # Head B = Instance 2 (Left side)
         
         # Set instance 1 for Head A
         from .app_state import set_current_instance
+        print("[DEBUG] DualHeadManager: Creating Head A (Instance 1)...")
         set_current_instance(1)
         self.head_a = AppState(card_type=CardType.HALF)
         self.head_a.current_instance = 1
+        print(f"[DEBUG] DualHeadManager: Head A created with instance={self.head_a.current_instance}")
         
         # Set instance 2 for Head B
+        print("[DEBUG] DualHeadManager: Creating Head B (Instance 2)...")
         set_current_instance(2)
         self.head_b = AppState(card_type=CardType.HALF)
         self.head_b.current_instance = 2
+        print(f"[DEBUG] DualHeadManager: Head B created with instance={self.head_b.current_instance}")
         
         # Connect signals to forward them with head identification
         self.head_a.state_changed.connect(self.head_a_state_changed.emit)
@@ -43,6 +49,8 @@ class DualHeadManager(QObject):
         # Store head names for UI display
         self.head_a_name = "Head A"
         self.head_b_name = "Head B"
+        
+        print("[DEBUG] DualHeadManager: Initialization complete")
     
     def get_head(self, head_id):
         """Get AppState for specified head ('A' or 'B')"""
