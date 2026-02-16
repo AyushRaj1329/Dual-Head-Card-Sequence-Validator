@@ -248,8 +248,8 @@ class AppState(QObject):
         # Auto-save configuration for power loss protection
         self.last_save_time = time.time()
         self.scans_since_save = 0
-        self.auto_save_interval = 300  # Save every 5 minutes (300 seconds)
-        self.auto_save_batch_size = 1000  # Save every 1000 scans
+        self.auto_save_interval = 60  # Save every 1 minute (was 5 minutes)
+        self.auto_save_batch_size = 100  # Save every 100 scans (was 1000)
 
         # On-demand scanning state machine
         self.is_waiting_for_start_card = False
@@ -347,8 +347,20 @@ class AppState(QObject):
                             print(f"Warning: Error loading file: {file_error}")
                             self.selected_file_path = ""
                     
-                    # Load log data
+                    # Restore scan state for recovery after crash
+                    self.current_card_index = cache.get('current_card_index', 0)
+                    self.start_card_has_been_scanned = cache.get('start_card_has_been_scanned', False)
+                    self.scan_side = cache.get('scan_side', 'top_to_bottom')
+                    self.expected_cards = cache.get('expected_cards', [])
+                    
+                    # Restore log data
                     self.log_data = cache.get('log_data', [])
+                    
+                    # Restore on-demand scanning state
+                    self.is_waiting_for_start_card = cache.get('is_waiting_for_start_card', False)
+                    self.is_waiting_for_count_card_1 = cache.get('is_waiting_for_count_card_1', False)
+                    self.is_waiting_for_count_card_2 = cache.get('is_waiting_for_count_card_2', False)
+                    self.first_card_index = cache.get('first_card_index', -1)
                     
                     # Restore output configuration if it exists
                     if self.output_config:
@@ -364,6 +376,8 @@ class AppState(QObject):
                     self.state_changed.emit()
             except (FileNotFoundError, json.JSONDecodeError) as e:
                 pass
+            except Exception as e:
+                print(f"Warning: Unexpected error loading cache: {e}")
     
     def _migrate_old_cache(self):
         """Migrate from old instance-specific cache files to unified cache"""
@@ -442,7 +456,17 @@ class AppState(QObject):
                 'start_card_code': self.start_card_code,
                 'scan_direction': self.scan_direction,
                 'log_data': self.log_data,
-                'current_theme': self.current_theme
+                'current_theme': self.current_theme,
+                # Scan state for recovery
+                'current_card_index': self.current_card_index,
+                'start_card_has_been_scanned': self.start_card_has_been_scanned,
+                'scan_side': self.scan_side,
+                'expected_cards': self.expected_cards,
+                # On-demand scanning state
+                'is_waiting_for_start_card': self.is_waiting_for_start_card,
+                'is_waiting_for_count_card_1': self.is_waiting_for_count_card_1,
+                'is_waiting_for_count_card_2': self.is_waiting_for_count_card_2,
+                'first_card_index': self.first_card_index,
             }
             
             # Get unified cache file path
@@ -496,16 +520,26 @@ class AppState(QObject):
 
     def load_instance_selection(self):
         """Load the last selected instance from global config"""
+        # NOTE: In dual-head mode, DualHeadManager explicitly sets the instance
+        # before creating AppState, so we should NOT call set_current_instance() here
+        # as it would override the correct instance.
+        # The instance is already correctly set by get_current_instance() in __init__
         cache_dir = user_data_dir(APP_NAME, APP_AUTHOR)
         instance_config_path = os.path.join(cache_dir, "instance_config.json")
         try:
             if os.path.exists(instance_config_path):
                 with open(instance_config_path, 'r') as f:
                     config = json.load(f)
+                    # Just read the config but don't call set_current_instance()
+                    # The instance is already set correctly by DualHeadManager or by default
                     instance = config.get('current_instance', 1)
-                    if instance in (1, 2):
-                        set_current_instance(instance)
-                        self.current_instance = instance
+                    # Only update self.current_instance if it's still at default (1)
+                    # and we're not in dual-head mode
+                    # In dual-head mode, self.current_instance is already set correctly
+                    if self.current_instance == 1 and instance in (1, 2):
+                        # Don't call set_current_instance() - just use the current value
+                        # The global instance is already set correctly
+                        pass
         except Exception as e:
             print(f"Warning: Failed to load instance selection: {e}")
 
@@ -565,6 +599,17 @@ class AppState(QObject):
             "bottom_right": "Bottom-Right"
         }
         scanned_side = scan_side_labels.get(self.scan_side, self.scan_side.replace('_', ' ').title())
+        
+        # Auto-save after each scan for power loss protection
+        self.scans_since_save += 1
+        current_time = time.time()
+        
+        # Save if batch size reached or interval elapsed
+        if (self.scans_since_save >= self.auto_save_batch_size or 
+            current_time - self.last_save_time >= self.auto_save_interval):
+            self.save_cache()
+            self.scans_since_save = 0
+            self.last_save_time = current_time
 
         # Set start card on first scan
         if self.first_scan_received and not self.start_card_has_been_scanned:
@@ -982,6 +1027,16 @@ class AppState(QObject):
         self._reset_ondemand_scan_state()
 
     def handle_ondemand_scan(self, scanned_code):
+        # Auto-save on-demand scan state
+        self.scans_since_save += 1
+        current_time = time.time()
+        
+        if (self.scans_since_save >= self.auto_save_batch_size or 
+            current_time - self.last_save_time >= self.auto_save_interval):
+            self.save_cache()
+            self.scans_since_save = 0
+            self.last_save_time = current_time
+        
         if self.is_waiting_for_start_card:
             self.process_start_card_scan(scanned_code)
         elif self.is_waiting_for_count_card_1:
