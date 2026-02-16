@@ -210,9 +210,6 @@ class AppState(QObject):
     def __init__(self, card_type=CardType.HALF):
         super().__init__()
         
-        print(f"[DEBUG] AppState.__init__ called with card_type={card_type}")
-        print(f"[DEBUG] AppState.__init__: get_current_instance() = {get_current_instance()}")
-        
         self.card_type = card_type
         self.main_port_reader = None
         self.ondemand_port_reader = None
@@ -220,7 +217,6 @@ class AppState(QObject):
 
         # Instance tracking
         self.current_instance = get_current_instance()
-        print(f"[DEBUG] AppState.__init__: self.current_instance = {self.current_instance}")
 
         # UDP Configuration (replaces COM port configuration)
         self.main_scanner_config = None  # {'local_ip': str, 'local_port': int, 'remote_ip': str, 'remote_port': int}
@@ -299,7 +295,6 @@ class AppState(QObject):
                 
                 if not os.path.exists(cache_file):
                     # Try to migrate from old instance-specific files
-                    print(f"[DEBUG] Instance {self.current_instance}: Unified cache not found, trying migration")
                     self._migrate_old_cache()
                     return
                 
@@ -349,7 +344,7 @@ class AppState(QObject):
                         try:
                             self.load_file(self.selected_file_path)
                         except Exception as file_error:
-                            print(f"[DEBUG] Instance {self.current_instance}: Error loading file: {file_error}")
+                            print(f"Warning: Error loading file: {file_error}")
                             self.selected_file_path = ""
                     
                     # Load log data
@@ -364,11 +359,10 @@ class AppState(QObject):
                                 config.get('remote_ip'), config.get('remote_port')
                             )
                         except Exception as udp_error:
-                            print(f"[DEBUG] Instance {self.current_instance}: Error connecting output UDP: {udp_error}")
+                            print(f"Warning: Error connecting output UDP: {udp_error}")
                     
                     self.state_changed.emit()
             except (FileNotFoundError, json.JSONDecodeError) as e:
-                print(f"[DEBUG] Instance {self.current_instance}: Error loading cache: {e}")
                 pass
     
     def _migrate_old_cache(self):
@@ -406,7 +400,7 @@ class AppState(QObject):
                     try:
                         self.load_file(self.selected_file_path)
                     except Exception as file_error:
-                        print(f"[DEBUG] Instance {self.current_instance}: Error loading file during migration: {file_error}")
+                        print(f"Warning: Error loading file during migration: {file_error}")
                         self.selected_file_path = ""
                 
                 self.log_data = old_cache.get('log_data', [])
@@ -419,7 +413,7 @@ class AppState(QObject):
                             config.get('remote_ip'), config.get('remote_port')
                         )
                     except Exception as udp_error:
-                        print(f"[DEBUG] Instance {self.current_instance}: Error connecting output UDP during migration: {udp_error}")
+                        print(f"Warning: Error connecting output UDP during migration: {udp_error}")
                 
                 # Save to new unified format
                 self.save_cache()
