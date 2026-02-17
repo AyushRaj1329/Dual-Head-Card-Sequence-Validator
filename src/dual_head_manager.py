@@ -43,6 +43,9 @@ class DualHeadManager(QObject):
         # Store head names for UI display
         self.head_a_name = "Head A"
         self.head_b_name = "Head B"
+        
+        # Ping remote devices on startup
+        self.ping_all_remote_devices()
     
     def get_head(self, head_id):
         """Get AppState for specified head ('A' or 'B')"""
@@ -76,3 +79,8 @@ class DualHeadManager(QObject):
         """Disconnect all ports on both heads"""
         self.head_a.disconnect_all_ports()
         self.head_b.disconnect_all_ports()
+    
+    def ping_all_remote_devices(self):
+        """Ping all configured remote devices for both heads"""
+        self.head_a.ping_remote_devices()
+        self.head_b.ping_remote_devices()

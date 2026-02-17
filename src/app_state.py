@@ -379,6 +379,22 @@ class AppState(QObject):
             except Exception as e:
                 print(f"Warning: Unexpected error loading cache: {e}")
     
+    def ping_remote_devices(self):
+        """Ping remote devices after loading configuration on startup"""
+        from .services.utilities import ping_remote_ip_async
+        
+        # Ping main scanner remote IP if configured
+        if self.main_scanner_config:
+            remote_ip = self.main_scanner_config.get('remote_ip')
+            if remote_ip:
+                ping_remote_ip_async(remote_ip)
+        
+        # Ping output remote IP if configured
+        if self.output_config:
+            remote_ip = self.output_config.get('remote_ip')
+            if remote_ip:
+                ping_remote_ip_async(remote_ip)
+    
     def _migrate_old_cache(self):
         """Migrate from old instance-specific cache files to unified cache"""
         try:
@@ -1188,10 +1204,12 @@ class AppState(QObject):
                     for i in range(actual_card_index - 1, actual_future_index, -1):
                         if i >= 0:  # Bounds check
                             skipped_qr = self.expected_cards[i][qr_position]
-                            log_entries.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
+                            log_entry = self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side)
+                            log_entries.append(log_entry)
                 
                 expected_jumped_qr = self.expected_cards[actual_future_index][qr_position]
-                log_entries.append(self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side))
+                log_entry = self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side)
+                log_entries.append(log_entry)
                 self.send_output_signal("OK (JUMPED)")
                 # Set current_card_index to scan position after the jumped card
                 # For bottom-to-top: convert array index back to scan position
@@ -1201,19 +1219,22 @@ class AppState(QObject):
                 # Skip cards from current array position up to future array position
                 for i in range(actual_card_index, future_index):
                     skipped_qr = self.expected_cards[i][qr_position]
-                    log_entries.append(self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side))
+                    log_entry = self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side)
+                    log_entries.append(log_entry)
                 
                 expected_jumped_qr = self.expected_cards[future_index][qr_position]
-                log_entries.append(self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side))
+                log_entry = self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side)
+                log_entries.append(log_entry)
                 self.send_output_signal("OK (JUMPED)")
                 # Set current_card_index to scan position after the jumped card
                 # For top-to-bottom: array index equals scan position
                 self.current_card_index = future_index + 1
         else:
-            log_entries.append(self.add_log_entry(scanned_code, expected_qr, "NOT OK", scanned_side))
+            log_entry = self.add_log_entry(scanned_code, expected_qr, "NOT OK", scanned_side)
+            log_entries.append(log_entry)
             self.send_output_signal("NOT OK")
         
-        self.log_data.extend(log_entries)
+        # Don't extend log_data again since add_log_entry already added entries
         self.log_updated.emit(log_entries)
         self.resume_scanning()
         self.state_changed.emit()

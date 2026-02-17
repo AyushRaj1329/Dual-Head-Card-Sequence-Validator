@@ -1,6 +1,66 @@
 # services/utilities.py
 import csv
+import subprocess
+import threading
+import platform
 from ..card_types import CardType
+
+def ping_remote_ip_async(remote_ip, callback=None):
+    """
+    Ping a remote IP address in a background thread.
+    Opens command prompt, runs ping, and closes it automatically.
+    
+    Args:
+        remote_ip (str): IP address to ping
+        callback (callable): Optional callback function to call when ping completes
+                           Receives (success: bool, message: str) as arguments
+    """
+    def ping_worker():
+        try:
+            # Determine OS and set appropriate ping command
+            if platform.system().lower() == 'windows':
+                # Windows: ping 4 times and close
+                cmd = f'ping -n 4 {remote_ip}'
+                # Use CREATE_NEW_CONSOLE to open in new command prompt window
+                process = subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+            else:
+                # Linux/Mac: ping 4 times
+                cmd = f'ping -c 4 {remote_ip}'
+                process = subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+            
+            # Wait for process to complete
+            stdout, stderr = process.communicate(timeout=30)
+            
+            # Check if ping was successful
+            success = process.returncode == 0
+            
+            if success:
+                message = f"Ping to {remote_ip} successful"
+            else:
+                message = f"Ping to {remote_ip} failed - Device may be unreachable"
+            
+            # Call callback if provided
+            if callback:
+                callback(success, message)
+                
+        except subprocess.TimeoutExpired:
+            process.kill()
+            if callback:
+                callback(False, f"Ping to {remote_ip} timed out")
+    # Start ping in background thread
+    thread = threading.Thread(target=ping_worker, daemon=True)
+    thread.start()
 
 def parse_cpd_cards(file_path, card_type=CardType.HALF):
     """Parse CPD file based on card type with new positioning logic - using only ICCID"""

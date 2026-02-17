@@ -773,9 +773,15 @@ class FileManagementWindow(QMainWindow):
         
         # Update statistics
         total = len(head.log_data)
-        ok = len([log for log in head.log_data if "OK" in log["status"]])
-        skipped = len([log for log in head.log_data if "SKIPPED" in log["status"]])
-        error = len([log for log in head.log_data if "NOT OK" in log["status"]])
+        
+        # Count successful scans: "OK" or "OK (JUMPED)"
+        ok = len([log for log in head.log_data if log["status"] in ("OK", "OK (JUMPED)")])
+        
+        # Count skipped cards: status is exactly "SKIPPED"
+        skipped = len([log for log in head.log_data if log["status"] == "SKIPPED"])
+        
+        # Count failed scans: "NOT OK" and other error statuses (NO FILE, EXTRA SCAN, NOT IN SEQUENCE)
+        error = len([log for log in head.log_data if log["status"] in ("NOT OK", "NO FILE", "EXTRA SCAN", "NOT IN SEQUENCE")])
         
         getattr(self, f'total_scanned_label_{head_id}').setText(str(total))
         getattr(self, f'scanned_ok_label_{head_id}').setText(str(ok))

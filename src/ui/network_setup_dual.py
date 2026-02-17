@@ -20,6 +20,7 @@ from PyQt6.QtCore import Qt, QRegularExpression
 from PyQt6.QtGui import QRegularExpressionValidator, QIntValidator
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
 from .widgets import ClockWidget
+from ..services.utilities import ping_remote_ip_async
 
 class NetworkSetupWindow(QMainWindow):
     def __init__(self, dual_head_manager):
@@ -613,6 +614,70 @@ class NetworkSetupWindow(QMainWindow):
                 
                 if baudrate:
                     getattr(self, f'ondemand_baud_rate_{head_id}').setCurrentText(str(baudrate))
+            
+            # Update status labels based on configuration
+            # Main scanner status
+            if head.main_scanner_config:
+                config = head.main_scanner_config
+                remote_ip = config.get('remote_ip', '')
+                remote_port = config.get('remote_port', '')
+                local_ip = config.get('local_ip', '')
+                local_port = config.get('local_port', '')
+                
+                if remote_ip and remote_port:
+                    status_msg = f"Connected: {local_ip or '0.0.0.0'}:{local_port} → {remote_ip}:{remote_port}"
+                    status_label = getattr(self, f'main_status_{head_id}')
+                    status_label.setText(status_msg)
+                    status_label.setObjectName("statusOK")
+                    status_label.style().unpolish(status_label)
+                    status_label.style().polish(status_label)
+            else:
+                status_label = getattr(self, f'main_status_{head_id}')
+                status_label.setText("Not Connected")
+                status_label.setObjectName("statusError")
+                status_label.style().unpolish(status_label)
+                status_label.style().polish(status_label)
+            
+            # Output status
+            if head.output_config:
+                config = head.output_config
+                remote_ip = config.get('remote_ip', '')
+                remote_port = config.get('remote_port', '')
+                local_ip = config.get('local_ip', '')
+                local_port = config.get('local_port', '')
+                
+                if remote_ip and remote_port:
+                    status_msg = f"Connected: {local_ip or '0.0.0.0'}:{local_port} → {remote_ip}:{remote_port}"
+                    status_label = getattr(self, f'output_status_{head_id}')
+                    status_label.setText(status_msg)
+                    status_label.setObjectName("statusOK")
+                    status_label.style().unpolish(status_label)
+                    status_label.style().polish(status_label)
+            else:
+                status_label = getattr(self, f'output_status_{head_id}')
+                status_label.setText("Not Connected")
+                status_label.setObjectName("statusError")
+                status_label.style().unpolish(status_label)
+                status_label.style().polish(status_label)
+            
+            # On-demand status
+            if head.ondemand_scanner_config:
+                config = head.ondemand_scanner_config
+                port = config.get('port', '')
+                
+                if port:
+                    status_msg = f"Connected: {port}"
+                    status_label = getattr(self, f'ondemand_status_{head_id}')
+                    status_label.setText(status_msg)
+                    status_label.setObjectName("statusOK")
+                    status_label.style().unpolish(status_label)
+                    status_label.style().polish(status_label)
+            else:
+                status_label = getattr(self, f'ondemand_status_{head_id}')
+                status_label.setText("Not Connected")
+                status_label.setObjectName("statusError")
+                status_label.style().unpolish(status_label)
+                status_label.style().polish(status_label)
 
     def apply_main_scanner(self, head_id):
         """Apply main scanner configuration for specified head"""
@@ -715,6 +780,16 @@ class NetworkSetupWindow(QMainWindow):
                 status_msg = f"Ready: {local_ip or '0.0.0.0'}:{local_port} ← {remote_ip}:{remote_port}"
                 self.update_input_status(head_id, status_msg, "green")
                 self.add_log_entry(f"Head {head_id}: Main scanner configured successfully on {local_ip or '0.0.0.0'}:{local_port}", "green")
+                
+                # Start pinging remote IP in background
+                def ping_callback(success, message):
+                    if success:
+                        self.add_log_entry(f"Head {head_id}: {message}", "green")
+                    else:
+                        self.add_log_entry(f"Head {head_id}: {message}", "orange")
+                
+                ping_remote_ip_async(remote_ip, callback=ping_callback)
+                
                 QMessageBox.information(self, "Success", f"Head {head_id} main scanner connected successfully!\n\nListening on: {local_ip or '0.0.0.0'}:{local_port}\nAccepting from: {remote_ip}:{remote_port}")
             else:
                 # Disconnect
@@ -727,6 +802,7 @@ class NetworkSetupWindow(QMainWindow):
             
             head.state_changed.emit()
             head.save_cache()
+            self.update_ui_from_state()  # Refresh UI to ensure status is updated
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to apply: {e}")
             self.add_log_entry(f"Head {head_id}: Error - {str(e)}", "red")
@@ -819,6 +895,16 @@ class NetworkSetupWindow(QMainWindow):
                 status_msg = f"Ready: {local_ip or '0.0.0.0'}:{local_port or 'auto'} → {remote_ip}:{remote_port}"
                 self.update_output_status(head_id, status_msg, "green")
                 self.add_log_entry(f"Head {head_id}: Output configured successfully", "green")
+                
+                # Start pinging remote IP in background
+                def ping_callback(success, message):
+                    if success:
+                        self.add_log_entry(f"Head {head_id}: {message}", "green")
+                    else:
+                        self.add_log_entry(f"Head {head_id}: {message}", "orange")
+                
+                ping_remote_ip_async(remote_ip, callback=ping_callback)
+                
                 QMessageBox.information(self, "Success", f"Head {head_id} output connected successfully!\n\nSending from: {local_ip or '0.0.0.0'}:{local_port or 'auto'}\nSending to: {remote_ip}:{remote_port}")
             else:
                 # Disconnect
@@ -829,6 +915,7 @@ class NetworkSetupWindow(QMainWindow):
             
             head.state_changed.emit()
             head.save_cache()
+            self.update_ui_from_state()  # Refresh UI to ensure status is updated
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to apply: {e}")
             self.add_log_entry(f"Head {head_id}: Error - {str(e)}", "red")
@@ -907,6 +994,7 @@ class NetworkSetupWindow(QMainWindow):
             
             head.state_changed.emit()
             head.save_cache()
+            self.update_ui_from_state()  # Refresh UI to ensure status is updated
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to apply: {e}")
             self.add_log_entry(f"Head {head_id}: Error - {str(e)}", "red")
