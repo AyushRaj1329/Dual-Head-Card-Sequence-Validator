@@ -110,3 +110,77 @@ class ScanPromptDialog(QDialog):
     def reject(self):
         self.cancelled.emit()
         super().reject()
+
+
+class PasswordDialog(QDialog):
+    """A password dialog to protect access to sensitive windows."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Authentication Required")
+        self.setModal(True)
+        
+        # Inherit styles from parent
+        if parent and hasattr(parent, 'styleSheet'):
+            try:
+                self.setStyleSheet(parent.styleSheet())
+            except:
+                pass
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        
+        # Title
+        title_label = QLabel("Network Configuration Access")
+        title_label.setObjectName("h2")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # Message
+        message_label = QLabel("Please enter the password to access network configuration settings.")
+        message_label.setWordWrap(True)
+        message_label.setObjectName("subtitle")
+        message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(message_label)
+        
+        # Password input
+        from PyQt6.QtWidgets import QLineEdit
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password_input.setPlaceholderText("Enter password")
+        self.password_input.returnPressed.connect(self.accept)
+        layout.addWidget(self.password_input)
+        
+        # Error label (hidden by default)
+        self.error_label = QLabel("")
+        self.error_label.setObjectName("subtitle")
+        self.error_label.setStyleSheet("color: #f44336;")
+        self.error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.error_label.setVisible(False)
+        layout.addWidget(self.error_label)
+        
+        # Buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+        
+        self.setMinimumWidth(400)
+        self.setMinimumHeight(200)
+    
+    def get_password(self):
+        """Return the entered password."""
+        return self.password_input.text()
+    
+    def show_error(self, message):
+        """Display an error message."""
+        self.error_label.setText(message)
+        self.error_label.setVisible(True)
+        self.password_input.clear()
+        self.password_input.setFocus()
+    
+    def clear_error(self):
+        """Clear the error message."""
+        self.error_label.setVisible(False)
+        self.error_label.setText("")

@@ -10,7 +10,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout,
     QVBoxLayout, QFrame, QFileDialog, QLineEdit, QMessageBox, QDialog,
-    QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy, QGridLayout, QScrollArea
+    QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy, QGridLayout, QScrollArea, QComboBox
 )
 from PyQt6.QtCore import Qt
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
@@ -21,7 +21,7 @@ from ..card_types import CardType
 
 class PreviewWindow(QDialog):
     """Preview window for sequence data"""
-    def __init__(self, expected_cards, card_type, parent=None):
+    def __init__(self, expected_cards, card_type, scan_direction="top_to_bottom", parent=None):
         super().__init__(parent)
         self.setWindowTitle("Preview Sequence Data")
         if parent and hasattr(parent, 'styleSheet'):
@@ -33,10 +33,23 @@ class PreviewWindow(QDialog):
         if not expected_cards:
             layout.addWidget(QLabel("No expected cards loaded."))
         else:
+            # Add scan direction indicator
+            direction_label = QLabel()
+            if scan_direction == "bottom_to_top":
+                direction_label.setText("📋 Scan Direction: Bottom → Top (Reversed Order)")
+                direction_label.setStyleSheet("color: #2196F3; font-weight: bold; padding: 5px;")
+            else:
+                direction_label.setText("📋 Scan Direction: Top → Bottom (Normal Order)")
+                direction_label.setStyleSheet("color: #4CAF50; font-weight: bold; padding: 5px;")
+            layout.addWidget(direction_label)
+            
             qr_labels = CardType.get_qr_labels(card_type)
             num_columns = 1 + len(qr_labels)
             
-            table = QTableWidget(len(expected_cards), num_columns)
+            # Reverse the cards if scan direction is bottom_to_top
+            display_cards = list(reversed(expected_cards)) if scan_direction == "bottom_to_top" else expected_cards
+            
+            table = QTableWidget(len(display_cards), num_columns)
             headers = ["Card Number"] + qr_labels
             table.setHorizontalHeaderLabels(headers)
             table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -45,7 +58,7 @@ class PreviewWindow(QDialog):
             for i in range(1, num_columns):
                 header.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
 
-            for row, card in enumerate(expected_cards):
+            for row, card in enumerate(display_cards):
                 numcard = card[0]
                 qr_codes = card[1:]
                 table.setItem(row, 0, QTableWidgetItem(str(numcard)))
@@ -160,6 +173,10 @@ class FileManagementWindow(QMainWindow):
         file_ops = self.create_file_operations_section(head_id)
         layout.addWidget(file_ops)
         
+        # Checksum Configuration Section
+        checksum_section = self.create_checksum_section(head_id)
+        layout.addWidget(checksum_section)
+        
         # Sequence Control Tools Section
         seq_tools = self.create_sequence_tools_section(head_id)
         layout.addWidget(seq_tools)
@@ -231,6 +248,57 @@ class FileManagementWindow(QMainWindow):
         
         return frame
 
+    def create_checksum_section(self, head_id):
+        """Create checksum configuration section for specified head"""
+        frame = QFrame()
+        frame.setObjectName("panel")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+        
+        title = QLabel("Checksum Configuration")
+        title.setObjectName("h2")
+        layout.addWidget(title)
+        
+        description = QLabel("Strip checksum digits from the end of scanned codes before validation.")
+        description.setObjectName("subtitle")
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        
+        # Checksum digits selector
+        checksum_layout = QHBoxLayout()
+        checksum_label = QLabel("Checksum Digits:")
+        checksum_label.setObjectName("subtitle")
+        
+        checksum_combo = QComboBox()
+        checksum_combo.addItems(["0 (None)", "1 (Last digit)", "2 (Last 2 digits)", "3 (Last 3 digits)"])
+        checksum_combo.setObjectName("secondary")
+        checksum_combo.currentIndexChanged.connect(lambda idx: self.update_checksum_digits(head_id, idx))
+        setattr(self, f'checksum_combo_{head_id}', checksum_combo)
+        
+        checksum_layout.addWidget(checksum_label)
+        checksum_layout.addWidget(checksum_combo)
+        checksum_layout.addStretch()
+        layout.addLayout(checksum_layout)
+        
+        # Example display
+        example_frame = QFrame()
+        example_frame.setObjectName("accentPanel")
+        example_layout = QVBoxLayout(example_frame)
+        example_layout.setSpacing(5)
+        
+        example_title = QLabel("Example:")
+        example_title.setStyleSheet("font-weight: bold;")
+        example_layout.addWidget(example_title)
+        
+        example_text = QLabel("Scanned: 123456789\nValidated: 123456789")
+        example_text.setObjectName("subtitle")
+        setattr(self, f'checksum_example_{head_id}', example_text)
+        example_layout.addWidget(example_text)
+        
+        layout.addWidget(example_frame)
+        
+        return frame
 
     def create_sequence_tools_section(self, head_id):
         """Create sequence control tools section for specified head"""
@@ -450,6 +518,25 @@ class FileManagementWindow(QMainWindow):
         return widget
 
     # File operation methods
+    def update_checksum_digits(self, head_id, index):
+        """Update checksum digits configuration for specified head"""
+        head = self.head_a if head_id == 'A' else self.head_b
+        head.checksum_digits = index
+        head.save_cache()
+        
+        # Update example text
+        example_label = getattr(self, f'checksum_example_{head_id}')
+        if index == 0:
+            example_label.setText("Scanned: 123456789\nValidated: 123456789")
+        elif index == 1:
+            example_label.setText("Scanned: 123456789\nValidated: 12345678")
+        elif index == 2:
+            example_label.setText("Scanned: 123456789\nValidated: 1234567")
+        elif index == 3:
+            example_label.setText("Scanned: 123456789\nValidated: 123456")
+        
+        head.state_changed.emit()
+    
     def select_file(self, head_id):
         """Load sequence file for specified head"""
         head = self.head_a if head_id == 'A' else self.head_b
@@ -510,7 +597,7 @@ class FileManagementWindow(QMainWindow):
         if not head.expected_cards:
             QMessageBox.warning(self, "Warning", f"Head {head_id}: No file loaded to preview.")
             return
-        dialog = PreviewWindow(head.expected_cards, head.card_type, self)
+        dialog = PreviewWindow(head.expected_cards, head.card_type, head.scan_direction, self)
         dialog.setWindowTitle(f"Preview - Head {head_id}")
         dialog.exec()
 
@@ -763,6 +850,10 @@ class FileManagementWindow(QMainWindow):
         getattr(self, f'count_cards_btn_{head_id}').setEnabled(has_file and has_ondemand and not is_waiting)
         getattr(self, f'download_btn_{head_id}').setEnabled(has_logs)
         getattr(self, f'clear_logs_btn_{head_id}').setEnabled(has_logs)
+        
+        # Update checksum combo box
+        checksum_combo = getattr(self, f'checksum_combo_{head_id}')
+        checksum_combo.setCurrentIndex(head.checksum_digits)
         
         # Update file status
         file_status = getattr(self, f'file_status_{head_id}')

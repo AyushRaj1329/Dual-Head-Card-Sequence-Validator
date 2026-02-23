@@ -10,7 +10,7 @@ from .network_setup_dual import NetworkSetupWindow
 from .file_management_dual import FileManagementWindow
 from .scanner_logging_dual import ScannerLoggingDualWindow
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
-from .widgets import ClockWidget, ScalableLabel
+from .widgets import ClockWidget, ScalableLabel, PasswordDialog
 import constants
 
 def resource_path(relative_path):
@@ -416,7 +416,15 @@ class HomePage(QMainWindow):
 
         if self.head_a.ondemand_scanner_config:
             config = self.head_a.ondemand_scanner_config
-            self.scan_card_com_status_label_a.setText(f"{config['local_ip']}:{config['local_port']}")
+            # Handle both serial (COM port) and UDP configurations
+            if 'port' in config and 'baudrate' in config:
+                # Serial COM port configuration
+                self.scan_card_com_status_label_a.setText(f"{config['port']} @ {config['baudrate']} baud")
+            elif 'local_ip' in config and 'local_port' in config:
+                # UDP configuration
+                self.scan_card_com_status_label_a.setText(f"{config['local_ip']}:{config['local_port']}")
+            else:
+                self.scan_card_com_status_label_a.setText("Configured")
             self.scan_card_com_status_label_a.setObjectName("statusOK")
         else:
             self.scan_card_com_status_label_a.setText("Not Set")
@@ -456,7 +464,15 @@ class HomePage(QMainWindow):
 
         if self.head_b.ondemand_scanner_config:
             config = self.head_b.ondemand_scanner_config
-            self.scan_card_com_status_label_b.setText(f"{config['local_ip']}:{config['local_port']}")
+            # Handle both serial (COM port) and UDP configurations
+            if 'port' in config and 'baudrate' in config:
+                # Serial COM port configuration
+                self.scan_card_com_status_label_b.setText(f"{config['port']} @ {config['baudrate']} baud")
+            elif 'local_ip' in config and 'local_port' in config:
+                # UDP configuration
+                self.scan_card_com_status_label_b.setText(f"{config['local_ip']}:{config['local_port']}")
+            else:
+                self.scan_card_com_status_label_b.setText("Configured")
             self.scan_card_com_status_label_b.setObjectName("statusOK")
         else:
             self.scan_card_com_status_label_b.setText("Not Set")
@@ -503,13 +519,46 @@ class HomePage(QMainWindow):
         self.scanner_logging_window.activateWindow()
 
     def open_com_port_setup(self):
-        if self.com_port_window is None:
-            self.com_port_window = NetworkSetupWindow(self.dual_head_manager)
-        if self.com_port_window.isMinimized():
-            self.com_port_window.showNormal()
-        self.com_port_window.showMaximized()
-        self.com_port_window.raise_()
-        self.com_port_window.activateWindow()
+        # Show password dialog
+        password_dialog = PasswordDialog(self)
+        
+        # Get the correct password from HEAD A (both heads share the same password)
+        correct_password = self.head_a.network_config_password
+        
+        # Try up to 3 times
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            password_dialog.clear_error()
+            result = password_dialog.exec()
+            
+            if result == password_dialog.DialogCode.Accepted:
+                entered_password = password_dialog.get_password()
+                
+                if entered_password == correct_password:
+                    # Password correct, open window
+                    if self.com_port_window is None:
+                        self.com_port_window = NetworkSetupWindow(self.dual_head_manager)
+                    if self.com_port_window.isMinimized():
+                        self.com_port_window.showNormal()
+                    self.com_port_window.showMaximized()
+                    self.com_port_window.raise_()
+                    self.com_port_window.activateWindow()
+                    return
+                else:
+                    # Password incorrect
+                    remaining = max_attempts - attempt - 1
+                    if remaining > 0:
+                        password_dialog.show_error(f"Incorrect password. {remaining} attempt(s) remaining.")
+                    else:
+                        QMessageBox.warning(
+                            self, 
+                            "Access Denied", 
+                            "Maximum password attempts exceeded. Access to Network Configuration denied."
+                        )
+                        return
+            else:
+                # User cancelled
+                return
 
     def open_file_management(self):
         if self.file_management_window is None:

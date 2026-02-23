@@ -16,11 +16,19 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QComboBox, QTextEdit, QScrollArea, QFrame, QMessageBox, 
     QGridLayout, QLineEdit, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QRegularExpression
+from PyQt6.QtCore import Qt, QRegularExpression, QEvent
 from PyQt6.QtGui import QRegularExpressionValidator, QIntValidator
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
 from .widgets import ClockWidget
 from ..services.utilities import ping_remote_ip_async
+
+
+class NoScrollComboBox(QComboBox):
+    """QComboBox that ignores scroll wheel events"""
+    def wheelEvent(self, event):
+        # Ignore wheel events to prevent accidental value changes
+        event.ignore()
+
 
 class NetworkSetupWindow(QMainWindow):
     def __init__(self, dual_head_manager):
@@ -57,6 +65,7 @@ class NetworkSetupWindow(QMainWindow):
             self.create_header(main_layout)
             self.create_split_configuration(main_layout)
             self.create_status_log(main_layout)
+            self.create_password_section(main_layout)
             
             main_layout.addStretch(1)
             
@@ -201,7 +210,7 @@ class NetworkSetupWindow(QMainWindow):
         
         # Local IP
         form.addWidget(QLabel("Local IP:"), 0, 0, Qt.AlignmentFlag.AlignRight)
-        local_ip = QComboBox()
+        local_ip = NoScrollComboBox()
         local_ip.setEditable(True)
         local_ip.setValidator(self.ip_validator)  # Add IP validator
         setattr(self, f'main_local_ip_{head_id}', local_ip)
@@ -209,7 +218,7 @@ class NetworkSetupWindow(QMainWindow):
         
         # Local Port
         form.addWidget(QLabel("Local Port:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        local_port = QComboBox()
+        local_port = NoScrollComboBox()
         local_port.setEditable(True)
         local_port.setValidator(self.port_validator)  # Add port validator
         local_port.addItems(["5000", "5001", "5002", "5003", "5004"])
@@ -218,7 +227,7 @@ class NetworkSetupWindow(QMainWindow):
         
         # Remote IP
         form.addWidget(QLabel("Remote IP:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        remote_ip = QComboBox()
+        remote_ip = NoScrollComboBox()
         remote_ip.setEditable(True)
         remote_ip.setValidator(self.ip_validator)  # Add IP validator
         remote_ip.setPlaceholderText("Scanner IP")
@@ -227,7 +236,7 @@ class NetworkSetupWindow(QMainWindow):
         
         # Remote Port
         form.addWidget(QLabel("Remote Port:"), 3, 0, Qt.AlignmentFlag.AlignRight)
-        remote_port = QComboBox()
+        remote_port = NoScrollComboBox()
         remote_port.setEditable(True)
         remote_port.setValidator(self.port_validator)  # Add port validator
         remote_port.addItems(["", "6000", "6001", "6002"])
@@ -279,7 +288,7 @@ class NetworkSetupWindow(QMainWindow):
         
         # Local IP
         form.addWidget(QLabel("Local IP:"), 0, 0, Qt.AlignmentFlag.AlignRight)
-        local_ip = QComboBox()
+        local_ip = NoScrollComboBox()
         local_ip.setEditable(True)
         local_ip.setValidator(self.ip_validator)  # Add IP validator
         setattr(self, f'output_local_ip_{head_id}', local_ip)
@@ -287,7 +296,7 @@ class NetworkSetupWindow(QMainWindow):
         
         # Local Port
         form.addWidget(QLabel("Local Port:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        local_port = QComboBox()
+        local_port = NoScrollComboBox()
         local_port.setEditable(True)
         local_port.setValidator(self.port_validator)  # Add port validator
         local_port.addItems(["0", "7000", "7001", "7002"])
@@ -296,7 +305,7 @@ class NetworkSetupWindow(QMainWindow):
         
         # Remote IP
         form.addWidget(QLabel("Remote IP:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        remote_ip = QComboBox()
+        remote_ip = NoScrollComboBox()
         remote_ip.setEditable(True)
         remote_ip.setValidator(self.ip_validator)  # Add IP validator
         remote_ip.setPlaceholderText("PLC IP")
@@ -305,7 +314,7 @@ class NetworkSetupWindow(QMainWindow):
         
         # Remote Port
         form.addWidget(QLabel("Remote Port:"), 3, 0, Qt.AlignmentFlag.AlignRight)
-        remote_port = QComboBox()
+        remote_port = NoScrollComboBox()
         remote_port.setEditable(True)
         remote_port.setValidator(self.port_validator)  # Add port validator
         remote_port.addItems(["6000", "6001", "8000", "8001"])
@@ -357,14 +366,14 @@ class NetworkSetupWindow(QMainWindow):
         
         # COM Port
         form.addWidget(QLabel("COM Port:"), 0, 0, Qt.AlignmentFlag.AlignRight)
-        com_port = QComboBox()
+        com_port = NoScrollComboBox()
         com_port.setEditable(False)
         setattr(self, f'ondemand_com_port_{head_id}', com_port)
         form.addWidget(com_port, 0, 1)
         
         # Baud Rate
         form.addWidget(QLabel("Baud Rate:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        baud_rate = QComboBox()
+        baud_rate = NoScrollComboBox()
         baud_rate.addItems(["9600", "19200", "38400", "57600", "115200"])
         baud_rate.setCurrentText("115200")
         setattr(self, f'ondemand_baud_rate_{head_id}', baud_rate)
@@ -435,6 +444,126 @@ class NetworkSetupWindow(QMainWindow):
         layout.addWidget(self.log_text)
         
         parent_layout.addWidget(frame)
+
+    def create_password_section(self, parent_layout):
+        """Create password change section"""
+        frame = QFrame()
+        frame.setObjectName("panel")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(20, 15, 20, 15)
+        layout.setSpacing(12)
+        
+        title = QLabel("Security Settings")
+        title.setObjectName("h2")
+        layout.addWidget(title)
+        
+        description = QLabel("Change the password required to access this Network Configuration window.")
+        description.setObjectName("subtitle")
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        
+        # Password change form
+        form_layout = QGridLayout()
+        form_layout.setSpacing(10)
+        
+        # Current password
+        form_layout.addWidget(QLabel("Current Password:"), 0, 0)
+        self.current_password_input = QLineEdit()
+        self.current_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.current_password_input.setPlaceholderText("Enter current password")
+        form_layout.addWidget(self.current_password_input, 0, 1)
+        
+        # New password
+        form_layout.addWidget(QLabel("New Password:"), 1, 0)
+        self.new_password_input = QLineEdit()
+        self.new_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.new_password_input.setPlaceholderText("Enter new password")
+        form_layout.addWidget(self.new_password_input, 1, 1)
+        
+        # Confirm new password
+        form_layout.addWidget(QLabel("Confirm Password:"), 2, 0)
+        self.confirm_password_input = QLineEdit()
+        self.confirm_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.confirm_password_input.setPlaceholderText("Confirm new password")
+        form_layout.addWidget(self.confirm_password_input, 2, 1)
+        
+        layout.addLayout(form_layout)
+        
+        # Change password button
+        button_layout = QHBoxLayout()
+        change_password_btn = QPushButton("🔒 Change Password")
+        change_password_btn.setObjectName("primary")
+        change_password_btn.clicked.connect(self.change_password)
+        button_layout.addWidget(change_password_btn)
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+        
+        # Info message (only shown if password is still default)
+        self.default_password_info = QLabel("⚠️ Default password: admin123")
+        self.default_password_info.setObjectName("subtitle")
+        self.default_password_info.setStyleSheet("color: #ff9800;")
+        layout.addWidget(self.default_password_info)
+        
+        # Update visibility based on current password
+        self.update_password_info_visibility()
+        
+        parent_layout.addWidget(frame)
+    
+    def update_password_info_visibility(self):
+        """Show/hide default password info based on whether password has been changed"""
+        if hasattr(self, 'default_password_info'):
+            # Show warning only if password is still the default
+            is_default = self.head_a.network_config_password == "admin123"
+            self.default_password_info.setVisible(is_default)
+
+    def change_password(self):
+        """Handle password change"""
+        current_password = self.current_password_input.text()
+        new_password = self.new_password_input.text()
+        confirm_password = self.confirm_password_input.text()
+        
+        # Validate inputs
+        if not current_password or not new_password or not confirm_password:
+            QMessageBox.warning(self, "Invalid Input", "All fields are required.")
+            return
+        
+        # Verify current password
+        if current_password != self.head_a.network_config_password:
+            QMessageBox.warning(self, "Incorrect Password", "Current password is incorrect.")
+            self.current_password_input.clear()
+            self.current_password_input.setFocus()
+            return
+        
+        # Check if new passwords match
+        if new_password != confirm_password:
+            QMessageBox.warning(self, "Password Mismatch", "New password and confirmation do not match.")
+            self.new_password_input.clear()
+            self.confirm_password_input.clear()
+            self.new_password_input.setFocus()
+            return
+        
+        # Check password strength (minimum 6 characters)
+        if len(new_password) < 6:
+            QMessageBox.warning(self, "Weak Password", "Password must be at least 6 characters long.")
+            return
+        
+        # Update password for both heads (they share the same password)
+        self.head_a.network_config_password = new_password
+        self.head_b.network_config_password = new_password
+        
+        # Save to cache
+        self.head_a.save_cache()
+        self.head_b.save_cache()
+        
+        # Clear inputs
+        self.current_password_input.clear()
+        self.new_password_input.clear()
+        self.confirm_password_input.clear()
+        
+        # Update visibility of default password warning
+        self.update_password_info_visibility()
+        
+        QMessageBox.information(self, "Success", "Password changed successfully!")
 
     def populate_all_dropdowns(self):
         """Populate all dropdowns for both heads"""

@@ -257,6 +257,12 @@ class AppState(QObject):
         self.is_waiting_for_count_card_2 = False
         self.first_card_index = -1
 
+        # Checksum configuration
+        self.checksum_digits = 0  # Number of digits to strip from end (0-3)
+        
+        # Network configuration password (default: "admin123")
+        self.network_config_password = "admin123"
+
         # Load instance selection first (before loading cache)
         self.load_instance_selection()
         
@@ -361,6 +367,12 @@ class AppState(QObject):
                     self.is_waiting_for_count_card_1 = cache.get('is_waiting_for_count_card_1', False)
                     self.is_waiting_for_count_card_2 = cache.get('is_waiting_for_count_card_2', False)
                     self.first_card_index = cache.get('first_card_index', -1)
+                    
+                    # Restore checksum configuration
+                    self.checksum_digits = cache.get('checksum_digits', 0)
+                    
+                    # Restore network configuration password
+                    self.network_config_password = cache.get('network_config_password', 'admin123')
                     
                     # Restore output configuration if it exists
                     if self.output_config:
@@ -483,6 +495,10 @@ class AppState(QObject):
                 'is_waiting_for_count_card_1': self.is_waiting_for_count_card_1,
                 'is_waiting_for_count_card_2': self.is_waiting_for_count_card_2,
                 'first_card_index': self.first_card_index,
+                # Checksum configuration
+                'checksum_digits': self.checksum_digits,
+                # Network configuration password
+                'network_config_password': self.network_config_password,
             }
             
             # Get unified cache file path
@@ -601,8 +617,25 @@ class AppState(QObject):
         self.is_scanning = False
         self.state_changed.emit()
 
+    def strip_checksum(self, code):
+        """
+        Strip checksum digits from the end of a scanned code.
+        
+        Args:
+            code: The scanned QR code string
+            
+        Returns:
+            The code with checksum digits removed (if checksum_digits > 0)
+        """
+        if self.checksum_digits > 0 and len(code) > self.checksum_digits:
+            return code[:-self.checksum_digits]
+        return code
+
     def handle_main_scan(self, scanned_code):
         log_entry = None
+        
+        # Strip checksum digits if configured
+        scanned_code_without_checksum = self.strip_checksum(scanned_code)
         
         # Get scan side label for logging
         scan_side_labels = {
@@ -629,8 +662,8 @@ class AppState(QObject):
 
         # Set start card on first scan
         if self.first_scan_received and not self.start_card_has_been_scanned:
-            if scanned_code in self.qr_to_index:
-                found_index, position = self.qr_to_index[scanned_code]
+            if scanned_code_without_checksum in self.qr_to_index:
+                found_index, position = self.qr_to_index[scanned_code_without_checksum]
                 
                 # Set scan side based on position and card type
                 if self.card_type == CardType.SINGLE:
@@ -644,21 +677,21 @@ class AppState(QObject):
                 
                 self.set_start_index(found_index)
                 self.start_card_has_been_scanned = True
-                self.start_card_code = scanned_code
+                self.start_card_code = scanned_code_without_checksum
                 self.first_scan_received = False
                 scanned_side = scan_side_labels.get(self.scan_side, self.scan_side.replace('_', ' ').title())
             else:
-                # Card not found in sequence, log as error
-                log_entry = self.add_log_entry(scanned_code, "N/A", "NOT IN SEQUENCE", scanned_side)
+                # Card not found in sequence, log as error (use trimmed code)
+                log_entry = self.add_log_entry(scanned_code_without_checksum, "N/A", "NOT IN SEQUENCE", scanned_side)
                 if log_entry:
                     self.log_updated.emit([log_entry])
                 self.state_changed.emit()
                 return
 
         if not self.expected_cards:
-            log_entry = self.add_log_entry(scanned_code, "N/A", "NO FILE", scanned_side)
+            log_entry = self.add_log_entry(scanned_code_without_checksum, "N/A", "NO FILE", scanned_side)
         elif self.is_scan_complete():
-            log_entry = self.add_log_entry(scanned_code, "End of Sequence", "EXTRA SCAN", scanned_side)
+            log_entry = self.add_log_entry(scanned_code_without_checksum, "End of Sequence", "EXTRA SCAN", scanned_side)
         else:
             # Get the actual card index based on scan direction
             actual_card_index = self.get_current_expected_card_index()
@@ -674,15 +707,15 @@ class AppState(QObject):
                 qr_position = position_map.get(self.scan_side, 1)
                 expected_qr = self.expected_cards[actual_card_index][qr_position]
             
-            if scanned_code == expected_qr:
+            if scanned_code_without_checksum == expected_qr:
                 status = "OK"
-                log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
+                log_entry = self.add_log_entry(scanned_code_without_checksum, expected_qr, status, scanned_side)
                 self.send_output_signal(status)
                 self.increment_card_index()
             else:
                 # Check if scanned code exists elsewhere in sequence
-                if scanned_code in self.qr_to_index:
-                    future_match_index, scanned_position = self.qr_to_index[scanned_code]
+                if scanned_code_without_checksum in self.qr_to_index:
+                    future_match_index, scanned_position = self.qr_to_index[scanned_code_without_checksum]
                     
                     # Determine the expected position based on card type and scan side
                     if self.card_type == CardType.SINGLE:
@@ -699,7 +732,7 @@ class AppState(QObject):
                     if scanned_position != expected_position:
                         # Wrong side scanned - just mark as NOT OK (simplified status)
                         status = "NOT OK"
-                        log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
+                        log_entry = self.add_log_entry(scanned_code_without_checksum, expected_qr, status, scanned_side)
                         self.send_output_signal("NOT OK")
                     else:
                         # Correct side, check if it's ahead in sequence
@@ -712,24 +745,24 @@ class AppState(QObject):
                                 # Convert future_match_index to scan position for UI
                                 future_scan_position = len(self.expected_cards) - 1 - future_match_index
                                 self.pause_scanning()
-                                self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_scan_position)
+                                self.mismatch_found_in_sequence.emit(scanned_code_without_checksum, num_skipped, future_scan_position)
                             else:
                                 status = "NOT OK"
-                                log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
+                                log_entry = self.add_log_entry(scanned_code_without_checksum, expected_qr, status, scanned_side)
                                 self.send_output_signal(status)
                         else:
                             # Top-to-bottom logic: check if future card comes AFTER current
                             if future_match_index > actual_card_index:
                                 num_skipped = future_match_index - actual_card_index
                                 self.pause_scanning()
-                                self.mismatch_found_in_sequence.emit(scanned_code, num_skipped, future_match_index)
+                                self.mismatch_found_in_sequence.emit(scanned_code_without_checksum, num_skipped, future_match_index)
                             else:
                                 status = "NOT OK"
-                                log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
+                                log_entry = self.add_log_entry(scanned_code_without_checksum, expected_qr, status, scanned_side)
                                 self.send_output_signal(status)
                 else:
                     status = "NOT OK"
-                    log_entry = self.add_log_entry(scanned_code, expected_qr, status, scanned_side)
+                    log_entry = self.add_log_entry(scanned_code_without_checksum, expected_qr, status, scanned_side)
                     self.send_output_signal(status)
         
         if log_entry:
@@ -992,7 +1025,21 @@ class AppState(QObject):
             self.state_changed.emit()
 
     def clear_logs(self):
+        """Clear logs and reset scanning state to treat file as fresh"""
         self.log_data = []
+        
+        # Reset scanning state
+        self.current_card_index = 0
+        self.start_card_has_been_scanned = False
+        self.first_scan_received = True
+        self.start_card_code = None
+        
+        # Reset on-demand scanning state
+        self.is_waiting_for_start_card = False
+        self.is_waiting_for_count_card_1 = False
+        self.is_waiting_for_count_card_2 = False
+        self.first_card_index = -1
+        
         self.log_cleared.emit()
         self.state_changed.emit()
         self.save_cache()
@@ -1043,6 +1090,9 @@ class AppState(QObject):
         self._reset_ondemand_scan_state()
 
     def handle_ondemand_scan(self, scanned_code):
+        # Strip checksum digits if configured
+        scanned_code = self.strip_checksum(scanned_code)
+        
         # Auto-save on-demand scan state
         self.scans_since_save += 1
         current_time = time.time()
@@ -1108,12 +1158,12 @@ class AppState(QObject):
         if scanned_index == -1:
             self.card_count_update.emit('error', f"Last card '{scanned_code}' not found.")
             # self.ondemand_scan_status_update.emit("", "Error. Try again.")
-        elif scanned_index < self.first_card_index:
-            self.card_count_update.emit('error', "Last card cannot come before first card.")
-            self.ondemand_scan_status_update.emit("", "Error. Try again.")
         else:
             self.card_count_update.emit('last_card', scanned_code)
-            count = scanned_index - self.first_card_index + 1
+            # Calculate range regardless of order (first or last can be scanned first)
+            start_index = min(self.first_card_index, scanned_index)
+            end_index = max(self.first_card_index, scanned_index)
+            count = end_index - start_index + 1
             self.card_count_update.emit('total', str(count))
             # self.ondemand_scan_status_update.emit("", f"Successfully counted {count} cards.")
         
@@ -1195,11 +1245,11 @@ class AppState(QObject):
         if approved and future_index != -1:
             # Handle skipping based on scan direction
             if self.scan_direction == "bottom_to_top":
-                # For bottom-to-top: future_index is scan position, convert to array index
+                # For bottom-to-top: future_index is already a scan position, convert to array index
                 actual_future_index = len(self.expected_cards) - 1 - future_index
                 
-                # Skip cards from current array position down to future array position (exclusive)
-                # Range should go from (actual_card_index - 1) down to (actual_future_index + 1)
+                # Skip cards from current array position down to future array position (inclusive)
+                # Range should go from (actual_card_index - 1) down to actual_future_index
                 if actual_card_index > actual_future_index:
                     for i in range(actual_card_index - 1, actual_future_index, -1):
                         if i >= 0:  # Bounds check

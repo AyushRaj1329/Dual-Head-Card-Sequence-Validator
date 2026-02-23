@@ -313,10 +313,18 @@ class ScannerLoggingDualWindow(QMainWindow):
             self.head_a_total_log_entries = []
             self.head_a_filtered_log_entries = []
             self.head_a_current_page = 0
+            # Clear the display fields
+            self.head_a_scanner_input_label.setText("Awaiting Scan Input...")
+            self.head_a_current_card_label.setText("N/A")
+            self.head_a_next_card_label.setText("Start scanning to set start card" if self.head_a.expected_cards else "No file loaded")
         else:
             self.head_b_total_log_entries = []
             self.head_b_filtered_log_entries = []
             self.head_b_current_page = 0
+            # Clear the display fields
+            self.head_b_scanner_input_label.setText("Awaiting Scan Input...")
+            self.head_b_current_card_label.setText("N/A")
+            self.head_b_next_card_label.setText("Start scanning to set start card" if self.head_b.expected_cards else "No file loaded")
         
         self.update_pagination_controls(head_id)
         self.display_current_page(head_id)
