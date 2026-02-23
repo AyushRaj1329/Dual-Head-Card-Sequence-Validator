@@ -6,14 +6,14 @@
       "OK (JUMPED)": "17\r\n"
     },
     "half": {
-      "OK": "9\r\n",
+      "OK": "09\r\n",
       "NOT OK": "10\r\n",
-      "OK (JUMPED)": "9\r\n"
+      "OK (JUMPED)": "09\r\n"
     },
     "quarter": {
-      "OK": "5\r\n",
-      "NOT OK": "6\r\n",
-      "OK (JUMPED)": "5\r\n"
+      "OK": "05\r\n",
+      "NOT OK": "06\r\n",
+      "OK (JUMPED)": "05\r\n"
     }
   }
 }
