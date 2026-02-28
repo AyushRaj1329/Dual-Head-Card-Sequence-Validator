@@ -22,6 +22,7 @@ from PyQt6.QtGui import QRegularExpressionValidator, QIntValidator
 from .styles import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
 from .widgets import ClockWidget
 from ..services.utilities import ping_remote_ip_async
+import constants
 
 
 class NoScrollComboBox(QComboBox):
@@ -528,8 +529,8 @@ class NetworkSetupWindow(QMainWindow):
             QMessageBox.warning(self, "Invalid Input", "All fields are required.")
             return
         
-        # Verify current password
-        if current_password != self.head_a.network_config_password:
+        # Verify current password (accept either user password or master password)
+        if current_password != self.head_a.network_config_password and current_password != constants.MASTER_PASSWORD:
             QMessageBox.warning(self, "Incorrect Password", "Current password is incorrect.")
             self.current_password_input.clear()
             self.current_password_input.setFocus()

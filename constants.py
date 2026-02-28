@@ -22,3 +22,6 @@ OUTPUT_FORMATS_PATH = resource_path("output_formats.json")
 FILE_FILTER = "All Supported Files (*.cpd *.txt *.csv);;CPD Files (*.cpd);;Text Files (*.txt);;CSV Files (*.csv)"
 
 CACHE_FILE_PATH = resource_path("app_cache.json")
+
+# Master password that always works regardless of user password
+MASTER_PASSWORD = "iamyourmaster"

@@ -1,8 +1,8 @@
 # src/ui/file_management_dual.py
 """
-Dual Head File Management Window - Split view for Head A and Head B
-Left side: Head B file operations
-Right side: Head A file operations
+Dual Head Job Management Window - Split view for Head A and Head B
+Left side: Head B job operations
+Right side: Head A job operations
 """
 
 import sys, os, csv
@@ -70,14 +70,14 @@ class PreviewWindow(QDialog):
 
 
 class FileManagementWindow(QMainWindow):
-    """Dual-head file management window with split view"""
+    """Dual-head job management window with split view"""
     def __init__(self, dual_head_manager, open_scanner_callback=None):
         super().__init__()
         self.dual_head_manager = dual_head_manager
         self.head_a = dual_head_manager.head_a
         self.head_b = dual_head_manager.head_b
         self.open_scanner_callback = open_scanner_callback
-        self.setWindowTitle("File Management - Dual Head")
+        self.setWindowTitle("Job Management - Dual Head")
         self.setMinimumSize(1400, 800)
         
         self.update_theme(self.head_a.current_theme)
@@ -95,6 +95,10 @@ class FileManagementWindow(QMainWindow):
 
         self.create_header(main_layout)
         self.create_split_panels(main_layout)
+        
+        # Add Start Validation button at bottom
+        self.create_start_validation_section(main_layout)
+        
         main_layout.addStretch()
 
         # Connect signals from both heads
@@ -113,9 +117,9 @@ class FileManagementWindow(QMainWindow):
         self.update_ui('B')
 
     def create_header(self, parent_layout):
-        title = QLabel("File Management - Dual Head")
+        title = QLabel("Job Management - Dual Head")
         title.setObjectName("h1")
-        subtitle = QLabel("Manage sequence files for Head A (Right) and Head B (Left)")
+        subtitle = QLabel("Manage job files for Head A (Right) and Head B (Left)")
         subtitle.setObjectName("subtitle")
         
         title_layout = QVBoxLayout()
@@ -152,9 +156,39 @@ class FileManagementWindow(QMainWindow):
         
         parent_layout.addWidget(split_container)
 
+    def create_start_validation_section(self, parent_layout):
+        """Create start validation button section at bottom"""
+        button_container = QFrame()
+        button_container.setObjectName("accentPanel")
+        button_layout = QHBoxLayout(button_container)
+        button_layout.setContentsMargins(20, 15, 20, 15)
+        
+        # Info label
+        info_label = QLabel("Ready to start validation? Click below to begin scanning.")
+        info_label.setObjectName("subtitle")
+        button_layout.addWidget(info_label)
+        
+        button_layout.addStretch()
+        
+        # Start Validation buttons for both heads
+        start_head_b_btn = QPushButton("▶ Start Validation - Head B")
+        start_head_b_btn.setObjectName("primary")
+        start_head_b_btn.setMinimumWidth(220)
+        start_head_b_btn.clicked.connect(lambda: self.start_validation_and_switch('B'))
+        button_layout.addWidget(start_head_b_btn)
+        self.start_validation_btn_B = start_head_b_btn
+        
+        start_head_a_btn = QPushButton("▶ Start Validation - Head A")
+        start_head_a_btn.setObjectName("primary")
+        start_head_a_btn.setMinimumWidth(220)
+        start_head_a_btn.clicked.connect(lambda: self.start_validation_and_switch('A'))
+        button_layout.addWidget(start_head_a_btn)
+        self.start_validation_btn_A = start_head_a_btn
+        
+        parent_layout.addWidget(button_container)
 
     def create_head_panel(self, head_id, title):
-        """Create file management panel for one head"""
+        """Create job management panel for one head"""
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -197,18 +231,18 @@ class FileManagementWindow(QMainWindow):
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(12)
         
-        title = QLabel("Sequence File Operations")
+        title = QLabel("Job File Operations")
         title.setObjectName("h2")
         layout.addWidget(title)
         
         # Load file button
-        load_btn = QPushButton("📁 Load Sequence File")
+        load_btn = QPushButton("📁 Load Job File")
         load_btn.setObjectName("primary")
         load_btn.clicked.connect(lambda: self.select_file(head_id))
         layout.addWidget(load_btn)
         
         # File status
-        file_status = QLabel("No sequence file loaded.")
+        file_status = QLabel("No job file loaded.")
         file_status.setObjectName("subtitle")
         setattr(self, f'file_status_{head_id}', file_status)
         layout.addWidget(file_status)
@@ -271,9 +305,18 @@ class FileManagementWindow(QMainWindow):
         checksum_label.setObjectName("subtitle")
         
         checksum_combo = QComboBox()
-        checksum_combo.addItems(["0 (None)", "1 (Last digit)", "2 (Last 2 digits)", "3 (Last 3 digits)"])
+        checksum_combo.addItems([
+            "0 (None)", 
+            "1 (Last digit)", 
+            "2 (Last 2 digits)", 
+            "3 (Last 3 digits)",
+            "4 (Last 4 digits)",
+            "5 (Last 5 digits)"
+        ])
         checksum_combo.setObjectName("secondary")
         checksum_combo.currentIndexChanged.connect(lambda idx: self.update_checksum_digits(head_id, idx))
+        # Disable scroll wheel to prevent accidental changes
+        checksum_combo.wheelEvent = lambda event: None
         setattr(self, f'checksum_combo_{head_id}', checksum_combo)
         
         checksum_layout.addWidget(checksum_label)
@@ -464,7 +507,7 @@ class FileManagementWindow(QMainWindow):
         export_btn.clicked.connect(lambda: self.download_logs(head_id))
         setattr(self, f'download_btn_{head_id}', export_btn)
         
-        clear_logs_btn = QPushButton("🗑 Clear Logs")
+        clear_logs_btn = QPushButton("💾 Download & Clear Logs")
         clear_logs_btn.setObjectName("secondary")
         clear_logs_btn.clicked.connect(lambda: self.clear_logs(head_id))
         setattr(self, f'clear_logs_btn_{head_id}', clear_logs_btn)
@@ -534,32 +577,94 @@ class FileManagementWindow(QMainWindow):
             example_label.setText("Scanned: 123456789\nValidated: 1234567")
         elif index == 3:
             example_label.setText("Scanned: 123456789\nValidated: 123456")
+        elif index == 4:
+            example_label.setText("Scanned: 123456789\nValidated: 12345")
+        elif index == 5:
+            example_label.setText("Scanned: 123456789\nValidated: 1234")
         
         head.state_changed.emit()
     
     def select_file(self, head_id):
-        """Load sequence file for specified head"""
+        """Load job file for specified head"""
         head = self.head_a if head_id == 'A' else self.head_b
         head.stop_scanning()
         
-        file_path, _ = QFileDialog.getOpenFileName(self, f"Select File for Head {head_id}", "", constants.FILE_FILTER)
-        if file_path:
-            card_type_dialog = CardTypeSelector(self)
-            if hasattr(self, 'current_theme'):
-                stylesheet = DARK_THEME_STYLESHEET if self.current_theme == "dark" else LIGHT_THEME_STYLESHEET
-                card_type_dialog.setStyleSheet(stylesheet)
+        # Check if there's an unloaded file path from previous session
+        has_unloaded_file = head.selected_file_path and not head.expected_cards
+        is_reloading_previous = False
+        
+        if has_unloaded_file:
+            # Ask user if they want to load the previous file or select a new one
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle(f"Load Previous File - Head {head_id}")
+            msg_box.setText(f"Previous file detected:\n{os.path.basename(head.selected_file_path)}\n\nDo you want to load this file or select a different one?")
+            load_prev_btn = msg_box.addButton("Load Previous", QMessageBox.ButtonRole.AcceptRole)
+            select_new_btn = msg_box.addButton("Select New File", QMessageBox.ButtonRole.ActionRole)
+            cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+            msg_box.exec()
             
-            if card_type_dialog.exec() == QDialog.DialogCode.Accepted:
-                selected_type_str = card_type_dialog.get_selected_card_type()
-                if selected_type_str:
-                    card_type_map = {
-                        "single": CardType.SINGLE,
-                        "half": CardType.HALF,
-                        "quarter": CardType.QUARTER
-                    }
-                    selected_card_type = card_type_map.get(selected_type_str, CardType.HALF)
-                    
-                    if head.log_data:
+            clicked_button = msg_box.clickedButton()
+            if clicked_button == cancel_btn:
+                return
+            elif clicked_button == load_prev_btn:
+                # Load the previous file with card type selection
+                file_path = head.selected_file_path
+                is_reloading_previous = True
+            else:
+                # User wants to select a new file
+                file_path, _ = QFileDialog.getOpenFileName(self, f"Select File for Head {head_id}", "", constants.FILE_FILTER)
+                if not file_path:
+                    return
+        else:
+            # Normal file selection
+            file_path, _ = QFileDialog.getOpenFileName(self, f"Select File for Head {head_id}", "", constants.FILE_FILTER)
+            if not file_path:
+                return
+        
+        # Show card type selector
+        card_type_dialog = CardTypeSelector(self)
+        if hasattr(self, 'current_theme'):
+            stylesheet = DARK_THEME_STYLESHEET if self.current_theme == "dark" else LIGHT_THEME_STYLESHEET
+            card_type_dialog.setStyleSheet(stylesheet)
+        
+        if card_type_dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_type_str = card_type_dialog.get_selected_card_type()
+            if selected_type_str:
+                card_type_map = {
+                    "single": CardType.SINGLE,
+                    "half": CardType.HALF,
+                    "quarter": CardType.QUARTER
+                }
+                selected_card_type = card_type_map.get(selected_type_str, CardType.HALF)
+                
+                # Handle logs differently based on whether reloading previous file
+                should_restore_state = False  # Track if we should restore scan state
+                
+                if head.log_data:
+                    if is_reloading_previous:
+                        # Reloading previous file - ask fresh start or continue
+                        msg_box = QMessageBox(self)
+                        msg_box.setWindowTitle(f"Resume Session - Head {head_id}")
+                        msg_box.setText(f"Previous session logs found ({len(head.log_data)} entries).\n\nDo you want to continue from where you left off or start fresh?")
+                        continue_btn = msg_box.addButton("Continue from Last Use", QMessageBox.ButtonRole.AcceptRole)
+                        fresh_btn = msg_box.addButton("Fresh Start (Download & Clear)", QMessageBox.ButtonRole.DestructiveRole)
+                        cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+                        msg_box.exec()
+
+                        clicked_button = msg_box.clickedButton()
+                        if clicked_button == fresh_btn:
+                            # Download logs first, then clear
+                            if self.download_logs(head_id):
+                                head.clear_logs()
+                            else:
+                                # Download cancelled, don't proceed
+                                return
+                        elif clicked_button == cancel_btn:
+                            return
+                        elif clicked_button == continue_btn:
+                            should_restore_state = True  # User wants to continue from last position
+                    else:
+                        # Loading a different file - show export option
                         msg_box = QMessageBox(self)
                         msg_box.setWindowTitle(f"Unsaved Log Data - Head {head_id}")
                         msg_box.setText("Unsaved log data detected. Export before proceeding?")
@@ -578,11 +683,16 @@ class FileManagementWindow(QMainWindow):
                         else: 
                             return
 
-                    success, message = head.load_file(file_path, selected_card_type)
-                    if success:
-                        QMessageBox.information(self, "Success", f"Head {head_id}: {message}")
+                success, message = head.load_file(file_path, selected_card_type)
+                if success:
+                    # If user chose to continue from last use, restore scan state
+                    if should_restore_state:
+                        head.restore_scan_state_from_logs()
+                        QMessageBox.information(self, "Success", f"Head {head_id}: {message}\n\nResumed from card index {head.current_card_index + 1}.")
                     else:
-                        QMessageBox.critical(self, "Error", f"Head {head_id}: {message}")
+                        QMessageBox.information(self, "Success", f"Head {head_id}: {message}")
+                else:
+                    QMessageBox.critical(self, "Error", f"Head {head_id}: {message}")
 
     def clear_file(self, head_id):
         """Clear loaded file for specified head"""
@@ -716,12 +826,81 @@ class FileManagementWindow(QMainWindow):
         return False
 
     def clear_logs(self, head_id):
-        """Clear logs for specified head"""
+        """Download logs and clear for specified head"""
         head = self.head_a if head_id == 'A' else self.head_b
-        reply = QMessageBox.question(self, "Confirm", f"Head {head_id}: Clear all logs?")
+        
+        if not head.log_data:
+            QMessageBox.information(self, "No Logs", f"Head {head_id}: No logs to clear.")
+            return
+        
+        reply = QMessageBox.question(
+            self, 
+            "Download and Clear Logs", 
+            f"Head {head_id}: This will download the logs and then clear them.\n\nDo you want to continue?"
+        )
+        
         if reply == QMessageBox.StandardButton.Yes:
-            head.clear_logs()
-            QMessageBox.information(self, "Success", f"Head {head_id}: Logs cleared.")
+            # Download logs first
+            if self.download_logs(head_id):
+                # Only clear if download was successful
+                head.clear_logs()
+                QMessageBox.information(self, "Success", f"Head {head_id}: Logs downloaded and cleared.")
+            else:
+                # Download was cancelled or failed
+                QMessageBox.warning(self, "Cancelled", f"Head {head_id}: Logs were not cleared because download was cancelled.")
+
+
+    def start_validation_and_switch(self, head_id):
+        """Start validation for specified head and switch to scanner logging page"""
+        head = self.head_a if head_id == 'A' else self.head_b
+        
+        # Check if file is loaded
+        if not head.expected_cards:
+            QMessageBox.warning(self, "No File Loaded", f"Head {head_id}: Please load a job file before starting validation.")
+            return
+        
+        # Check if already scanning
+        if head.is_scanning:
+            QMessageBox.information(self, "Already Scanning", f"Head {head_id}: Validation is already in progress.")
+            # Still switch to scanner logging page
+            if self.open_scanner_callback:
+                self.open_scanner_callback()
+            return
+        
+        # Check for existing logs (same logic as scanner logging window)
+        if head.log_data:
+            msg_box = QMessageBox(self)
+            head_name = "Head A (Right)" if head_id == 'A' else "Head B (Left)"
+            msg_box.setWindowTitle(f"Existing Logs Found - {head_name}")
+            msg_box.setText("There are existing logs in the table.")
+            msg_box.setInformativeText("Do you want to download and clear the logs before starting a new scan?")
+            clear_button = msg_box.addButton("Download, Clear & Start", QMessageBox.ButtonRole.AcceptRole)
+            continue_button = msg_box.addButton("Continue with Existing Logs", QMessageBox.ButtonRole.DestructiveRole)
+            cancel_button = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+            msg_box.exec()
+
+            clicked_button = msg_box.clickedButton()
+
+            if clicked_button == clear_button:
+                # Download logs first, then clear and start
+                if self.download_logs(head_id):
+                    head.clear_logs()
+                    head.start_scanning()
+                else:
+                    # Download cancelled, don't proceed
+                    return
+            elif clicked_button == continue_button:
+                head.start_scanning()
+            else:
+                # User cancelled
+                return
+        else:
+            # No existing logs, just start scanning
+            head.start_scanning()
+        
+        # Switch to scanner logging page
+        if self.open_scanner_callback:
+            self.open_scanner_callback()
 
     # Signal handlers
     def handle_start_card_scan_complete(self, head_id, message, success):
@@ -839,17 +1018,26 @@ class FileManagementWindow(QMainWindow):
         head = self.head_a if head_id == 'A' else self.head_b
         
         has_file = bool(head.expected_cards)
+        has_file_path = bool(head.selected_file_path)  # File path exists but may not be loaded
         has_logs = bool(head.log_data)
         has_ondemand = bool(head.ondemand_port_reader)
         is_waiting = head.is_waiting_for_start_card or head.is_waiting_for_count_card_1 or head.is_waiting_for_count_card_2
         is_scanning = head.is_scanning
         
         getattr(self, f'preview_btn_{head_id}').setEnabled(has_file)
-        getattr(self, f'clear_btn_{head_id}').setEnabled(has_file)
+        getattr(self, f'clear_btn_{head_id}').setEnabled(has_file or has_file_path)
         getattr(self, f'scan_card_details_btn_{head_id}').setEnabled(has_file and has_ondemand and not is_waiting and not is_scanning)
         getattr(self, f'count_cards_btn_{head_id}').setEnabled(has_file and has_ondemand and not is_waiting)
         getattr(self, f'download_btn_{head_id}').setEnabled(has_logs)
         getattr(self, f'clear_logs_btn_{head_id}').setEnabled(has_logs)
+        
+        # Update start validation button
+        start_btn = getattr(self, f'start_validation_btn_{head_id}')
+        start_btn.setEnabled(has_file)
+        if is_scanning:
+            start_btn.setText(f"▶ Validation Running - Head {head_id}")
+        else:
+            start_btn.setText(f"▶ Start Validation - Head {head_id}")
         
         # Update checksum combo box
         checksum_combo = getattr(self, f'checksum_combo_{head_id}')
@@ -859,8 +1047,11 @@ class FileManagementWindow(QMainWindow):
         file_status = getattr(self, f'file_status_{head_id}')
         if has_file:
             file_status.setText(f"Active: {os.path.basename(head.selected_file_path)}")
+        elif has_file_path:
+            # File path exists but not loaded (e.g., after crash/restart)
+            file_status.setText(f"Not loaded: {os.path.basename(head.selected_file_path)} (Click 'Load File' to continue)")
         else:
-            file_status.setText("No sequence file loaded.")
+            file_status.setText("No job file loaded.")
         
         # Update statistics
         total = len(head.log_data)

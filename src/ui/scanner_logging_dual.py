@@ -26,7 +26,7 @@ class ScannerLoggingDualWindow(QMainWindow):
         self.head_a = dual_head_manager.head_a
         self.head_b = dual_head_manager.head_b
         
-        self.setWindowTitle("Live Scanner Feed & Validation Log - Dual Head")
+        self.setWindowTitle("Live Status and Logs - Dual Head")
         
         # Set initial theme
         self.update_theme(self.head_a.current_theme)
@@ -80,7 +80,7 @@ class ScannerLoggingDualWindow(QMainWindow):
 
     def create_header(self, parent_layout):
         layout = QHBoxLayout()
-        title = QLabel("Live Scanner Feed & Validation Log - Dual Head")
+        title = QLabel("Live Status and Logs - Dual Head")
         title.setObjectName("h1")
 
         layout.addWidget(title)
@@ -351,8 +351,8 @@ class ScannerLoggingDualWindow(QMainWindow):
             head_name = "Head A (Right)" if head_id == "head_a" else "Head B (Left)"
             msg_box.setWindowTitle(f"Existing Logs Found - {head_name}")
             msg_box.setText("There are existing logs in the table.")
-            msg_box.setInformativeText("Do you want to clear the logs before starting a new scan?\n\nYou can save the logs from the File & Log Management window.")
-            clear_button = msg_box.addButton("Clear Logs and Start", QMessageBox.ButtonRole.AcceptRole)
+            msg_box.setInformativeText("To download logs, use the Job Management window.\n\nDo you want to clear the logs and start a new scan?")
+            clear_button = msg_box.addButton("Clear and Start", QMessageBox.ButtonRole.AcceptRole)
             continue_button = msg_box.addButton("Continue with Existing Logs", QMessageBox.ButtonRole.DestructiveRole)
             cancel_button = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
             msg_box.exec()

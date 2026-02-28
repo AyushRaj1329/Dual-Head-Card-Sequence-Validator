@@ -263,9 +263,9 @@ class HomePage(QMainWindow):
         layout = QHBoxLayout(container)
         layout.setSpacing(30)
         cards_data = [
-            ("Scanner & Logging", "Live scanner input and validation logging", "Scanner Control", "📱", self.open_scanner),
+            ("Live Status and Logs", "Live scanner input and validation logging", "Scanner Control", "📱", self.open_scanner),
             ("Network & COM Setup", "Configure network and serial connections", "Configuration", "🔧", self.open_com_port_setup),
-            ("File Management", "Manage card sequence files and logs", "File & Log Management", "📁", self.open_file_management)
+            ("Job Management", "Manage card job files and logs", "Job & Log Management", "📁", self.open_file_management)
         ]
         for title, desc, btn_text, icon, callback in cards_data:
             layout.addWidget(self.create_feature_card(title, desc, btn_text, icon, callback), 1)
@@ -534,7 +534,8 @@ class HomePage(QMainWindow):
             if result == password_dialog.DialogCode.Accepted:
                 entered_password = password_dialog.get_password()
                 
-                if entered_password == correct_password:
+                # Check if entered password matches either user password or master password
+                if entered_password == correct_password or entered_password == constants.MASTER_PASSWORD:
                     # Password correct, open window
                     if self.com_port_window is None:
                         self.com_port_window = NetworkSetupWindow(self.dual_head_manager)

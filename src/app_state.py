@@ -344,29 +344,31 @@ class AppState(QObject):
                     except ValueError:
                         self.card_type = CardType.HALF
                     
-                    # Load file path and sequence
+                    # Load file path but don't auto-load the file
+                    # User must manually load the file after crash/restart
                     self.selected_file_path = cache.get('selected_file_path')
-                    if self.selected_file_path and os.path.exists(self.selected_file_path):
-                        try:
-                            self.load_file(self.selected_file_path)
-                        except Exception as file_error:
-                            print(f"Warning: Error loading file: {file_error}")
-                            self.selected_file_path = ""
+                    if self.selected_file_path and not os.path.exists(self.selected_file_path):
+                        # Clear path if file no longer exists
+                        self.selected_file_path = ""
                     
-                    # Restore scan state for recovery after crash
-                    self.current_card_index = cache.get('current_card_index', 0)
-                    self.start_card_has_been_scanned = cache.get('start_card_has_been_scanned', False)
-                    self.scan_side = cache.get('scan_side', 'top_to_bottom')
-                    self.expected_cards = cache.get('expected_cards', [])
+                    # DO NOT restore file data - user must manually reload
+                    # Reset scan state (file not loaded)
+                    self.current_card_index = 0
+                    self.start_card_has_been_scanned = False
+                    self.scan_side = 'top_to_bottom'
+                    self.expected_cards = []  # Empty - file not loaded
+                    self.qr_to_index = {}  # Clear QR lookup
+                    self.numcard_to_qrs = {}  # Clear numcard lookup
+                    self.start_card_code = None  # Clear start card
                     
-                    # Restore log data
+                    # Restore log data (keep existing logs)
                     self.log_data = cache.get('log_data', [])
                     
-                    # Restore on-demand scanning state
-                    self.is_waiting_for_start_card = cache.get('is_waiting_for_start_card', False)
-                    self.is_waiting_for_count_card_1 = cache.get('is_waiting_for_count_card_1', False)
-                    self.is_waiting_for_count_card_2 = cache.get('is_waiting_for_count_card_2', False)
-                    self.first_card_index = cache.get('first_card_index', -1)
+                    # Reset on-demand scanning state (file not loaded)
+                    self.is_waiting_for_start_card = False
+                    self.is_waiting_for_count_card_1 = False
+                    self.is_waiting_for_count_card_2 = False
+                    self.first_card_index = -1
                     
                     # Restore checksum configuration
                     self.checksum_digits = cache.get('checksum_digits', 0)
@@ -976,7 +978,7 @@ class AppState(QObject):
             
             # Get card type name for user feedback
             card_type_names = {
-                CardType.SINGLE: "Single Card",
+                CardType.SINGLE: "ISO Card",
                 CardType.HALF: "Half Card",
                 CardType.QUARTER: "Quarter Card"
             }
@@ -990,6 +992,46 @@ class AppState(QObject):
             self.numcard_to_qrs = {}
             self.state_changed.emit()
             return False, f"Error loading file: {e}"
+
+    def restore_scan_state_from_logs(self):
+        """Restore scan state from existing logs to continue from last position"""
+        if not self.log_data or not self.expected_cards:
+            return
+        
+        # Find the last successfully scanned card index
+        last_ok_index = -1
+        for log_entry in reversed(self.log_data):
+            status = log_entry.get("status", "")
+            expected_code = log_entry.get("expected_code", "")
+            
+            # Look for successful scans (OK or OK (JUMPED))
+            if status in ("OK", "OK (JUMPED)") and expected_code:
+                # Find this card's index in expected_cards
+                if expected_code in self.qr_to_index:
+                    card_index, _ = self.qr_to_index[expected_code]
+                    last_ok_index = card_index
+                    break
+        
+        # Set current index to continue from next card after last successful scan
+        if last_ok_index >= 0:
+            # Move to next card
+            next_index = last_ok_index + 1
+            if next_index < len(self.expected_cards):
+                self.current_card_index = next_index
+                self.start_card_has_been_scanned = True
+                self.first_scan_received = False
+            else:
+                # All cards were scanned, start from beginning
+                self.current_card_index = 0
+                self.start_card_has_been_scanned = False
+                self.first_scan_received = True
+        else:
+            # No successful scans found, start from beginning
+            self.current_card_index = 0
+            self.start_card_has_been_scanned = False
+            self.first_scan_received = True
+        
+        self.state_changed.emit()
 
     def clear_file(self):
         self.selected_file_path = ""
@@ -1054,7 +1096,7 @@ class AppState(QObject):
             QMessageBox.warning(None, "Configuration Error", "The 'On-Demand Scanner Port' must be configured in COM Port Setup before this action can be performed.")
             return
         if not self.expected_cards:
-            QMessageBox.warning(None, "File Error", "A sequence file must be loaded before scanning card details.")
+            QMessageBox.warning(None, "File Error", "A job file must be loaded before scanning card details.")
             return
         self.is_waiting_for_start_card = True
         self.ondemand_scan_status_update.emit("active", "Scan a card to view its details...")
@@ -1064,7 +1106,7 @@ class AppState(QObject):
             QMessageBox.warning(None, "Configuration Error", "The 'On-Demand Scanner Port' must be configured in COM Port Setup before this action can be performed.")
             return
         if not self.expected_cards:
-            QMessageBox.warning(None, "File Error", "A sequence file must be loaded before counting cards.")
+            QMessageBox.warning(None, "File Error", "A job file must be loaded before counting cards.")
             return
         
         self.is_waiting_for_count_card_1 = True

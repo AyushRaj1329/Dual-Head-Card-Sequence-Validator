@@ -83,7 +83,7 @@ QLabel#clock_display {
 
 /* ---- Buttons ---- */
 QPushButton {
-    border: none;
+    border: 2px solid transparent;
     border-radius: 6px;
     padding: 10px 20px;
     font-size: 14px;
@@ -94,55 +94,69 @@ QPushButton {
 QPushButton#primary {
     background-color: #00aaff;
     color: #ffffff;
+    border: 2px solid #0088cc;
 }
 QPushButton#primary:hover {
     background-color: #33bbff;
+    border: 2px solid #00aaff;
 }
 QPushButton#primary:pressed {
     background-color: #0088cc;
+    border: 2px solid #006699;
 }
 QPushButton#primary:disabled {
     background-color: #4a5160;
     color: #808080;
+    border: 2px solid #3c424e;
 }
 
 /* Secondary Button Style */
 QPushButton#secondary {
     background-color: #555c6b;
     color: #e0e0e0;
+    border: 2px solid #444a57;
 }
 QPushButton#secondary:hover {
     background-color: #666e7f;
+    border: 2px solid #555c6b;
 }
 QPushButton#secondary:pressed {
     background-color: #444a57;
+    border: 2px solid #353b48;
 }
 QPushButton#secondary:disabled {
     background-color: #353b48;
     color: #6a6a6a;
+    border: 2px solid #2c313c;
 }
 
 /* Theme Toggle Button Styles */
 QPushButton#dark_theme_toggle {
     background-color: #00aaff; /* Blue for dark theme toggle */
     color: #ffffff;
+    border: 2px solid #0088cc;
 }
 QPushButton#dark_theme_toggle:hover {
     background-color: #33bbff;
+    border: 2px solid #00aaff;
 }
 QPushButton#dark_theme_toggle:pressed {
     background-color: #0088cc;
+    border: 2px solid #006699;
 }
 
 QPushButton#light_theme_toggle {
     background-color: #007bff; /* Blue for light theme toggle */
     color: #ffffff;
+    border: 2px solid #0056b3;
 }
 QPushButton#light_theme_toggle:hover {
     background-color: #0056b3;
+    border: 2px solid #004085;
 }
 QPushButton#light_theme_toggle:pressed {
     background-color: #004085;
+    border: 2px solid #003366;
 }
 
 /* Instance Toggle Button Styles - Dark Theme */
@@ -242,6 +256,72 @@ QLabel#statusNeutral {
     font-size: 12px;
     font-weight: bold;
 }
+
+/* ---- Message Box Buttons ---- */
+QMessageBox {
+    background-color: #21252b;
+}
+QMessageBox QLabel {
+    color: #e0e0e0;
+}
+QMessageBox QPushButton {
+    background-color: #555c6b;
+    color: #e0e0e0;
+    border: 2px solid #444a57;
+    border-radius: 6px;
+    padding: 12px 30px;
+    font-size: 13px;
+    font-weight: bold;
+    min-width: 180px;
+    min-height: 40px;
+    max-height: none;
+}
+QMessageBox QPushButton:hover {
+    background-color: #666e7f;
+    border: 2px solid #555c6b;
+}
+QMessageBox QPushButton:pressed {
+    background-color: #444a57;
+    border: 2px solid #353b48;
+}
+QMessageBox QPushButton:default {
+    background-color: #00aaff;
+    color: #ffffff;
+    border: 2px solid #0088cc;
+}
+QMessageBox QPushButton:default:hover {
+    background-color: #33bbff;
+    border: 2px solid #00aaff;
+}
+QMessageBox QPushButton:default:pressed {
+    background-color: #0088cc;
+    border: 2px solid #006699;
+}
+
+/* ---- Radio Buttons (for dialogs) ---- */
+QRadioButton {
+    color: #e0e0e0;
+    spacing: 8px;
+}
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    border: 2px solid #4a5160;
+    background-color: #2c313c;
+}
+QRadioButton::indicator:hover {
+    border: 2px solid #00aaff;
+}
+QRadioButton::indicator:checked {
+    background-color: #00aaff;
+    border: 2px solid #0088cc;
+    background-image: radial-gradient(circle, #ffffff 0%, #ffffff 35%, transparent 40%, transparent 100%);
+}
+QRadioButton::indicator:checked:hover {
+    background-color: #33bbff;
+    border: 2px solid #00aaff;
+}
 """
 
 LIGHT_THEME_STYLESHEET = """
@@ -327,7 +407,7 @@ QLabel#clock_display {
 
 /* ---- Buttons ---- */
 QPushButton {
-    border: none;
+    border: 2px solid transparent;
     border-radius: 6px;
     padding: 10px 20px;
     font-size: 14px;
@@ -338,55 +418,69 @@ QPushButton {
 QPushButton#primary {
     background-color: #007bff; /* Blue primary */
     color: #ffffff;
+    border: 2px solid #0056b3;
 }
 QPushButton#primary:hover {
     background-color: #0056b3;
+    border: 2px solid #004085;
 }
 QPushButton#primary:pressed {
     background-color: #004085;
+    border: 2px solid #003366;
 }
 QPushButton#primary:disabled {
     background-color: #cccccc;
     color: #999999;
+    border: 2px solid #b0b0b0;
 }
 
 /* Secondary Button Style */
 QPushButton#secondary {
     background-color: #6c757d; /* Gray secondary */
     color: #ffffff;
+    border: 2px solid #5a6268;
 }
 QPushButton#secondary:hover {
     background-color: #5a6268;
+    border: 2px solid #494f54;
 }
 QPushButton#secondary:pressed {
     background-color: #494f54;
+    border: 2px solid #3d4349;
 }
 QPushButton#secondary:disabled {
     background-color: #e0e0e0;
     color: #b0b0b0;
+    border: 2px solid #cccccc;
 }
 
 /* Theme Toggle Button Styles */
 QPushButton#dark_theme_toggle {
     background-color: #00aaff; /* Blue for dark theme toggle */
     color: #ffffff;
+    border: 2px solid #0088cc;
 }
 QPushButton#dark_theme_toggle:hover {
     background-color: #33bbff;
+    border: 2px solid #00aaff;
 }
 QPushButton#dark_theme_toggle:pressed {
     background-color: #0088cc;
+    border: 2px solid #006699;
 }
 
 QPushButton#light_theme_toggle {
     background-color: #007bff; /* Blue for light theme toggle */
     color: #ffffff;
+    border: 2px solid #0056b3;
 }
 QPushButton#light_theme_toggle:hover {
     background-color: #0056b3;
+    border: 2px solid #004085;
 }
 QPushButton#light_theme_toggle:pressed {
     background-color: #004085;
+    border: 2px solid #003366;
 }
 
 /* Instance Toggle Button Styles - Light Theme */
@@ -485,5 +579,71 @@ QLabel#statusNeutral {
     border-radius: 4px;
     font-size: 12px;
     font-weight: bold;
+}
+
+/* ---- Message Box Buttons ---- */
+QMessageBox {
+    background-color: #f0f0f0;
+}
+QMessageBox QLabel {
+    color: #333333;
+}
+QMessageBox QPushButton {
+    background-color: #6c757d;
+    color: #ffffff;
+    border: 2px solid #5a6268;
+    border-radius: 6px;
+    padding: 12px 30px;
+    font-size: 13px;
+    font-weight: bold;
+    min-width: 180px;
+    min-height: 40px;
+    max-height: none;
+}
+QMessageBox QPushButton:hover {
+    background-color: #5a6268;
+    border: 2px solid #494f54;
+}
+QMessageBox QPushButton:pressed {
+    background-color: #494f54;
+    border: 2px solid #3d4349;
+}
+QMessageBox QPushButton:default {
+    background-color: #007bff;
+    color: #ffffff;
+    border: 2px solid #0056b3;
+}
+QMessageBox QPushButton:default:hover {
+    background-color: #0056b3;
+    border: 2px solid #004085;
+}
+QMessageBox QPushButton:default:pressed {
+    background-color: #004085;
+    border: 2px solid #003366;
+}
+
+/* ---- Radio Buttons (for dialogs) ---- */
+QRadioButton {
+    color: #333333;
+    spacing: 8px;
+}
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    border: 2px solid #cccccc;
+    background-color: #ffffff;
+}
+QRadioButton::indicator:hover {
+    border: 2px solid #007bff;
+}
+QRadioButton::indicator:checked {
+    background-color: #007bff;
+    border: 2px solid #0056b3;
+    background-image: radial-gradient(circle, #ffffff 0%, #ffffff 35%, transparent 40%, transparent 100%);
+}
+QRadioButton::indicator:checked:hover {
+    background-color: #0056b3;
+    border: 2px solid #004085;
 }
 """

@@ -39,9 +39,9 @@ class CardTypeSelector(QDialog):
         # Radio button group
         self.button_group = QButtonGroup(self)
         
-        # Single Card Option
+        # ISO Card Option
         self.single_card_option = self.create_card_option(
-            "Single Card",
+            "ISO Card",
             "One ICCID per card",
             "single"
         )
