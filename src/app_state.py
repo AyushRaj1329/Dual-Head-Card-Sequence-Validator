@@ -1248,10 +1248,10 @@ class AppState(QObject):
                 # For bottom-to-top: future_index is already a scan position, convert to array index
                 actual_future_index = len(self.expected_cards) - 1 - future_index
                 
-                # Skip cards from current array position down to future array position (inclusive)
-                # Range should go from (actual_card_index - 1) down to actual_future_index
+                # Skip cards from current array position down to future array position (exclusive)
+                # Range should go from (actual_card_index - 1) down to actual_future_index (not including actual_future_index)
                 if actual_card_index > actual_future_index:
-                    for i in range(actual_card_index - 1, actual_future_index, -1):
+                    for i in range(actual_card_index - 1, actual_future_index - 1, -1):
                         if i >= 0:  # Bounds check
                             skipped_qr = self.expected_cards[i][qr_position]
                             log_entry = self.add_log_entry("MISSING", skipped_qr, "SKIPPED", scanned_side)

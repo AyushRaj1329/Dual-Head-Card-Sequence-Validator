@@ -11,6 +11,7 @@ import serial.tools.list_ports
 import errno
 import threading
 import subprocess
+import platform
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton, QHBoxLayout,
     QVBoxLayout, QComboBox, QTextEdit, QScrollArea, QFrame, QMessageBox, 
@@ -1222,11 +1223,13 @@ class NetworkSetupWindow(QMainWindow):
                     
                     try:
                         # Ping with 1 second timeout
+                        # Use CREATE_NO_WINDOW flag to prevent CMD windows from appearing in EXE
                         result = subprocess.run(
                             ['ping', '-n', '1', '-w', '500', ip],
                             capture_output=True,
                             text=True,
-                            timeout=1
+                            timeout=1,
+                            creationflags=subprocess.CREATE_NO_WINDOW if platform.system().lower() == 'windows' else 0
                         )
                         
                         if result.returncode == 0:
