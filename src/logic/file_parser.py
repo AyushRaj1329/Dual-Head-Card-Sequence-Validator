@@ -1,12 +1,11 @@
 # logic/file_parser.py
 import os
-import csv
-from ..services.utilities import parse_cpd_cards, parse_txt_file, parse_csv_file
+from ..services.utilities import parse_cpd_cards
 from ..card_types import CardType
 
 def parse_file(file_path, card_type):
     """
-    Parse file based on extension and card type.
+    Parse CPD file based on card type.
     card_type must be provided (no auto-detection).
     Returns (card_data, card_type)
     """
@@ -17,11 +16,7 @@ def parse_file(file_path, card_type):
     
     if file_extension.lower() == '.cpd':
         card_data = parse_cpd_cards(file_path, card_type)
-    elif file_extension.lower() == '.txt':
-        card_data = parse_txt_file(file_path, card_type)
-    elif file_extension.lower() == '.csv':
-        card_data = parse_csv_file(file_path, card_type)
     else:
-        raise ValueError(f"Unsupported file type: {file_extension}")
+        raise ValueError(f"Unsupported file type: {file_extension}. Only CPD files are supported.")
     
     return card_data, card_type

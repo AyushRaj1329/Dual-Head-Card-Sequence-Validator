@@ -294,7 +294,7 @@ class FileManagementWindow(QMainWindow):
         title.setObjectName("h2")
         layout.addWidget(title)
         
-        description = QLabel("Strip checksum digits from the end of scanned codes before validation.")
+        description = QLabel("Configure additional checksum digits to strip from scanned codes.")
         description.setObjectName("subtitle")
         description.setWordWrap(True)
         layout.addWidget(description)
@@ -564,10 +564,11 @@ class FileManagementWindow(QMainWindow):
     def update_checksum_digits(self, head_id, index):
         """Update checksum digits configuration for specified head"""
         head = self.head_a if head_id == 'A' else self.head_b
-        head.checksum_digits = index
+        # Add 1 to UI index to get actual backend value (UI shows 0-5, backend uses 1-6)
+        head.checksum_digits = index + 1
         head.save_cache()
         
-        # Update example text
+        # Update example text (UI shows as if stripping index digits, but backend strips index+1)
         example_label = getattr(self, f'checksum_example_{head_id}')
         if index == 0:
             example_label.setText("Scanned: 123456789\nValidated: 123456789")
@@ -1025,7 +1026,7 @@ class FileManagementWindow(QMainWindow):
         is_scanning = head.is_scanning
         
         getattr(self, f'preview_btn_{head_id}').setEnabled(has_file)
-        getattr(self, f'clear_btn_{head_id}').setEnabled(has_file or has_file_path)
+        getattr(self, f'clear_btn_{head_id}').setEnabled(has_file)  # Only enable when file is actually loaded
         getattr(self, f'scan_card_details_btn_{head_id}').setEnabled(has_file and has_ondemand and not is_waiting and not is_scanning)
         getattr(self, f'count_cards_btn_{head_id}').setEnabled(has_file and has_ondemand and not is_waiting)
         getattr(self, f'download_btn_{head_id}').setEnabled(has_logs)
@@ -1041,17 +1042,24 @@ class FileManagementWindow(QMainWindow):
         
         # Update checksum combo box
         checksum_combo = getattr(self, f'checksum_combo_{head_id}')
-        checksum_combo.setCurrentIndex(head.checksum_digits)
+        # Subtract 1 from backend value to get UI index (backend uses 1-6, UI shows 0-5)
+        checksum_combo.setCurrentIndex(max(0, head.checksum_digits - 1))
         
         # Update file status
         file_status = getattr(self, f'file_status_{head_id}')
         if has_file:
             file_status.setText(f"Active: {os.path.basename(head.selected_file_path)}")
+            file_status.setObjectName("subtitle")
+            file_status.setStyleSheet("")  # Clear any custom styling
         elif has_file_path:
             # File path exists but not loaded (e.g., after crash/restart)
-            file_status.setText(f"Not loaded: {os.path.basename(head.selected_file_path)} (Click 'Load File' to continue)")
+            file_status.setText(f"⚠ File not loaded: {os.path.basename(head.selected_file_path)}\nClick 'Load Job File' to continue")
+            file_status.setObjectName("statusWarning")
+            file_status.setStyleSheet("font-size: 14px;")  # Make it slightly larger
         else:
             file_status.setText("No job file loaded.")
+            file_status.setObjectName("subtitle")
+            file_status.setStyleSheet("")  # Clear any custom styling
         
         # Update statistics
         total = len(head.log_data)

@@ -18,8 +18,8 @@ def resource_path(relative_path):
 LOGO_PATH = resource_path(os.path.join("assets", "logo.png"))
 OUTPUT_FORMATS_PATH = resource_path("output_formats.json")
 
-# This constant is still used by the file dialog in file_management.py
-FILE_FILTER = "All Supported Files (*.cpd *.txt *.csv);;CPD Files (*.cpd);;Text Files (*.txt);;CSV Files (*.csv)"
+# This constant is used by the file dialog in file_management.py
+FILE_FILTER = "CPD Files (*.cpd)"
 
 CACHE_FILE_PATH = resource_path("app_cache.json")
 

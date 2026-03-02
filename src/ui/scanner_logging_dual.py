@@ -345,6 +345,35 @@ class ScannerLoggingDualWindow(QMainWindow):
 
         app_state.resolve_mismatch(scanned_code, approved, future_index)
 
+    def show_scan_completion_dialog(self, app_state, head_id):
+        """Show completion dialog when all cards are scanned"""
+        head_name = "Head A (Right)" if head_id == "head_a" else "Head B (Left)"
+        
+        # Calculate statistics - include LAST OK variants in successful count
+        total_scans = len(app_state.log_data)
+        successful = len([log for log in app_state.log_data if log["status"] in ("OK", "OK (JUMPED)", "LAST OK", "LAST OK (JUMPED)")])
+        failed = len([log for log in app_state.log_data if log["status"] in ("NOT OK", "NO FILE", "EXTRA SCAN", "NOT IN SEQUENCE")])
+        skipped = len([log for log in app_state.log_data if log["status"] == "SKIPPED"])
+        
+        # Get file name
+        file_name = os.path.basename(app_state.selected_file_path) if app_state.selected_file_path else "Unknown"
+        
+        # Create completion message
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(f"Validation Complete - {head_name}")
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setText(f"Job file validation completed successfully!\n\nFile: {file_name}")
+        msg_box.setInformativeText(
+            f"Validation Statistics:\n\n"
+            f"Total Scans: {total_scans}\n"
+            f"Successful: {successful}\n"
+            f"Failed: {failed}\n"
+            f"Skipped: {skipped}\n\n"
+            f"All cards in the job have been scanned."
+        )
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
+
     def start_scanning_clicked(self, app_state, head_id):
         if app_state.log_data:
             msg_box = QMessageBox(self)

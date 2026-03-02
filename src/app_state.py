@@ -203,6 +203,7 @@ class AppState(QObject):
     theme_changed = pyqtSignal(str)
     start_card_scan_complete = pyqtSignal(str, bool)
     card_type_changed = pyqtSignal(object)  # Emits CardType enum
+    scan_completed = pyqtSignal()  # Emitted when scan is complete
 
     mismatch_found_in_sequence = pyqtSignal(str, int, int)
     card_count_update = pyqtSignal(str, str)
@@ -258,7 +259,7 @@ class AppState(QObject):
         self.first_card_index = -1
 
         # Checksum configuration
-        self.checksum_digits = 0  # Number of digits to strip from end (0-3)
+        self.checksum_digits = 1  # Number of digits to strip from end (1-6), default 1
         
         # Network configuration password (default: "admin123")
         self.network_config_password = "admin123"
@@ -370,8 +371,15 @@ class AppState(QObject):
                     self.is_waiting_for_count_card_2 = False
                     self.first_card_index = -1
                     
-                    # Restore checksum configuration
-                    self.checksum_digits = cache.get('checksum_digits', 0)
+                    # Restore checksum configuration with migration
+                    cached_checksum = cache.get('checksum_digits', 1)
+                    # Migrate old value: if cached value is 0, update to new default of 1
+                    if cached_checksum == 0:
+                        self.checksum_digits = 1
+                        # Save the migrated value immediately
+                        self.save_cache()
+                    else:
+                        self.checksum_digits = cached_checksum
                     
                     # Restore network configuration password
                     self.network_config_password = cache.get('network_config_password', 'admin123')
@@ -619,18 +627,23 @@ class AppState(QObject):
         self.is_scanning = False
         self.state_changed.emit()
 
-    def strip_checksum(self, code):
+    def strip_checksum(self, code, use_ui_value=False):
         """
         Strip checksum digits from the end of a scanned code.
         
         Args:
             code: The scanned QR code string
+            use_ui_value: If True, use checksum_digits - 1 (the actual UI value without secret increment)
+                         If False, use checksum_digits as-is (includes secret +1 for main scanning)
             
         Returns:
             The code with checksum digits removed (if checksum_digits > 0)
         """
-        if self.checksum_digits > 0 and len(code) > self.checksum_digits:
-            return code[:-self.checksum_digits]
+        # For on-demand operations, use the actual UI value (subtract the secret increment)
+        digits_to_strip = max(0, self.checksum_digits - 1) if use_ui_value else self.checksum_digits
+        
+        if digits_to_strip > 0 and len(code) > digits_to_strip:
+            return code[:-digits_to_strip]
         return code
 
     def handle_main_scan(self, scanned_code):
@@ -682,6 +695,17 @@ class AppState(QObject):
                 self.start_card_code = scanned_code_without_checksum
                 self.first_scan_received = False
                 scanned_side = scan_side_labels.get(self.scan_side, self.scan_side.replace('_', ' ').title())
+                
+                # Check if this first scan completes the sequence (single card file)
+                if self.is_scan_complete():
+                    # Log the scan first with LAST OK status
+                    log_entry = self.add_log_entry(scanned_code_without_checksum, scanned_code_without_checksum, "LAST OK", scanned_side)
+                    if log_entry:
+                        self.log_updated.emit([log_entry])
+                    self.send_output_signal("LAST OK")
+                    # Don't auto-stop - let user manually stop scanning
+                    self.state_changed.emit()
+                    return
             else:
                 # Card not found in sequence, log as error (use trimmed code)
                 log_entry = self.add_log_entry(scanned_code_without_checksum, "N/A", "NOT IN SEQUENCE", scanned_side)
@@ -710,10 +734,15 @@ class AppState(QObject):
                 expected_qr = self.expected_cards[actual_card_index][qr_position]
             
             if scanned_code_without_checksum == expected_qr:
-                status = "OK"
+                # Check if this will be the last card after incrementing
+                will_be_complete = (self.current_card_index + 1) >= len(self.expected_cards)
+                status = "LAST OK" if will_be_complete else "OK"
+                
                 log_entry = self.add_log_entry(scanned_code_without_checksum, expected_qr, status, scanned_side)
                 self.send_output_signal(status)
                 self.increment_card_index()
+                
+                # Don't auto-stop - let user manually stop scanning
             else:
                 # Check if scanned code exists elsewhere in sequence
                 if scanned_code_without_checksum in self.qr_to_index:
@@ -1132,8 +1161,8 @@ class AppState(QObject):
         self._reset_ondemand_scan_state()
 
     def handle_ondemand_scan(self, scanned_code):
-        # Strip checksum digits if configured
-        scanned_code = self.strip_checksum(scanned_code)
+        # Strip checksum digits using UI value (without secret increment)
+        scanned_code = self.strip_checksum(scanned_code, use_ui_value=True)
         
         # Auto-save on-demand scan state
         self.scans_since_save += 1
@@ -1302,12 +1331,25 @@ class AppState(QObject):
                             log_entries.append(log_entry)
                 
                 expected_jumped_qr = self.expected_cards[actual_future_index][qr_position]
-                log_entry = self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side)
+                
+                # Check if this jump will complete the sequence
+                will_be_complete = (len(self.expected_cards) - actual_future_index) >= len(self.expected_cards)
+                status = "LAST OK (JUMPED)" if will_be_complete else "OK (JUMPED)"
+                
+                log_entry = self.add_log_entry(scanned_code, expected_jumped_qr, status, scanned_side)
                 log_entries.append(log_entry)
-                self.send_output_signal("OK (JUMPED)")
+                self.send_output_signal(status)
                 # Set current_card_index to scan position after the jumped card
                 # For bottom-to-top: convert array index back to scan position
                 self.current_card_index = len(self.expected_cards) - actual_future_index
+                
+                # Resume scanning after successful jump
+                self.resume_scanning()
+                
+                # Don't auto-stop - let user manually stop scanning
+                self.log_updated.emit(log_entries)
+                self.state_changed.emit()
+                return
             else:
                 # Top-to-bottom: future_index is already array index
                 # Skip cards from current array position up to future array position
@@ -1317,18 +1359,33 @@ class AppState(QObject):
                     log_entries.append(log_entry)
                 
                 expected_jumped_qr = self.expected_cards[future_index][qr_position]
-                log_entry = self.add_log_entry(scanned_code, expected_jumped_qr, "OK (JUMPED)", scanned_side)
+                
+                # Check if this jump will complete the sequence
+                will_be_complete = (future_index + 1) >= len(self.expected_cards)
+                status = "LAST OK (JUMPED)" if will_be_complete else "OK (JUMPED)"
+                
+                log_entry = self.add_log_entry(scanned_code, expected_jumped_qr, status, scanned_side)
                 log_entries.append(log_entry)
-                self.send_output_signal("OK (JUMPED)")
+                self.send_output_signal(status)
                 # Set current_card_index to scan position after the jumped card
                 # For top-to-bottom: array index equals scan position
                 self.current_card_index = future_index + 1
+                
+                # Resume scanning after successful jump
+                self.resume_scanning()
+                
+                # Don't auto-stop - let user manually stop scanning
+                self.log_updated.emit(log_entries)
+                self.state_changed.emit()
+                return
         else:
+            # User cancelled the jump
             log_entry = self.add_log_entry(scanned_code, expected_qr, "NOT OK", scanned_side)
             log_entries.append(log_entry)
             self.send_output_signal("NOT OK")
+            # Resume scanning only when jump is cancelled
+            self.resume_scanning()
         
         # Don't extend log_data again since add_log_entry already added entries
         self.log_updated.emit(log_entries)
-        self.resume_scanning()
         self.state_changed.emit()
