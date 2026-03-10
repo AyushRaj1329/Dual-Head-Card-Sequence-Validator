@@ -2,9 +2,8 @@
 
 > **⚠️ PRIVATE REPOSITORY** - This is a proprietary industrial card validation system. Unauthorized distribution is prohibited.
 > 
-> **Company**: [YOUR_COMPANY_NAME]  
-> **Project Owner**: [YOUR_NAME]  
-> **Contact**: [YOUR_EMAIL]
+> **Project Owner**: Ayush Raj Chauhan
+> **Contact**: ayushraj790673@gmail.com
 
 A professional desktop application for high-throughput validation of card sequences with embedded QR codes (ICCIDs). Features dual-head architecture for simultaneous independent validation operations in industrial environments.
 
@@ -88,8 +87,8 @@ A professional desktop application for high-throughput validation of card sequen
 ### **Development Setup**
 1. **Clone the repository** (requires access permissions):
    ```bash
-   git clone https://github.com/[YOUR_GITHUB_USERNAME]/[YOUR_REPO_NAME].git
-   cd [YOUR_REPO_NAME]
+   git clone https://github.com/Ayushraj1329/Dual-Head-Card-Sequence-Validator.git
+   cd Dual-Head-Card-Sequence-Validator
    ```
 
 2. **Create virtual environment**:
@@ -229,15 +228,10 @@ python main.py
 
 ## 📞 Support & Contact
 
-- **Technical Support**: [YOUR_SUPPORT_EMAIL](mailto:[YOUR_SUPPORT_EMAIL])
-- **Project Owner**: [YOUR_NAME] - [YOUR_EMAIL](mailto:[YOUR_EMAIL])
-- **License Issues**: [YOUR_LICENSE_EMAIL](mailto:[YOUR_LICENSE_EMAIL])
+- **Technical Support**: ayushraj790673@gmail.com
+- **Project Owner**: Ayush Raj Chauhan - ayushraj790673@gmail.com
+- **License Issues**: ayushraj790673@gmail.com
 - **Documentation**: See `docs/` folder for detailed guides
 
-## 📄 License
 
-This software is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited. See [SECURITY.md](SECURITY.md) for security policies.
-
----
-
-**© [CURRENT_YEAR] [YOUR_COMPANY_NAME]. All rights reserved.**
+**© 2026 ARC. All rights reserved.**
