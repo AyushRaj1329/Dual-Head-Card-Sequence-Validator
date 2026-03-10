@@ -1,85 +1,243 @@
-# Card Sequence Validator
+# Card Sequence Validator - Dual Head System
 
-The Card Sequence Validator is a desktop application designed to validate sequences of cards. It provides a user-friendly interface for managing card sequence files, configuring serial communication ports for scanner input and output, and monitoring validation processes in real-time.
+> **⚠️ PRIVATE REPOSITORY** - This is a proprietary industrial card validation system. Unauthorized distribution is prohibited.
+> 
+> **Company**: [YOUR_COMPANY_NAME]  
+> **Project Owner**: [YOUR_NAME]  
+> **Contact**: [YOUR_EMAIL]
 
-## Features
+A professional desktop application for high-throughput validation of card sequences with embedded QR codes (ICCIDs). Features dual-head architecture for simultaneous independent validation operations in industrial environments.
 
-*   **Intuitive User Interface:** Built with PyQt6, offering a clean and responsive design.
-*   **Card Sequence File Management:** Supports loading and parsing card sequence data from `.cpd`, `.txt`, and `.csv` file formats.
-*   **COM Port Configuration:** Easily set up and manage input and output serial ports for communication with external devices (e.g., card scanners).
-*   **Real-time Scanning & Logging:** Monitor live scanner input and view validation logs directly within the application. Validation results ("OK", "NOT OK") trigger corresponding output signals to the configured COM port. When cards are skipped (user-approved jump), they are logged, but no output signal is sent.
-*   **Theming:** Switch between dark and light themes for a personalized experience.
+## 📸 Screenshots & Demo
 
-## Installation
+<!-- Add your screenshots here -->
+![Main Dashboard](docs/screenshots/main-dashboard.png)
+*Main application dashboard with dual-head status monitoring*
 
-To set up and run the Card Sequence Validator, follow these steps:
+![Network Configuration](docs/screenshots/network-setup.png)
+*UDP and COM port configuration interface*
 
-1.  **Obtain the source code:**
-    If you received the source code as a ZIP file or similar archive, extract it to your desired location. Navigate into the extracted `card_Seq_valv3` directory.
+![File Management](docs/screenshots/file-management.png)
+*Dual-head job management with sequence preview*
 
-2.  **Create a virtual environment (recommended):**
-    ```bash
-    python -m venv .venv
-    ```
+![Live Scanning](docs/screenshots/live-scanning.png)
+*Real-time validation logging and monitoring*
 
-3.  **Activate the virtual environment:**
-    *   **Windows:**
-        ```bash
-        .venv\Scripts\activate
-        ```
-    *   **macOS/Linux:**
-        ```bash
-        source .venv/bin/activate
-        ```
+### 🎥 Demo Video
+[![Demo Video](docs/screenshots/video-thumbnail.png)](docs/demo/card-validator-demo.mp4)
+*Click to watch the full application demonstration*
 
-4.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+## 🚀 Key Features
 
-## Usage
+### **Dual-Head Architecture**
+- **Simultaneous Operation**: Two independent validation heads (Head A & Head B) operating concurrently
+- **Independent Configuration**: Separate network settings, files, and logs for each head
+- **Color-Coded Interface**: Head A (Green) and Head B (Blue) for easy identification
+- **Unified Management**: Centralized control with individual head monitoring
 
-To start the application, activate your virtual environment and run the `main.py` file:
+### **Industrial-Grade Reliability**
+- **Auto-Save Protection**: Automatic cache saving every 60 seconds or 100 scans
+- **Atomic File Operations**: Power-loss protection with atomic cache writes
+- **Multi-NIC Support**: Proper handling of systems with multiple network interfaces
+- **Thread-Safe Operations**: Reentrant locking for concurrent access protection
 
+### **Advanced Card Validation**
+- **Multiple Card Types**: Single, Half, and Quarter card formats
+- **Intelligent Positioning**: Automatic card position detection based on file structure
+- **Checksum Handling**: Configurable digit stripping (1-6 digits) from scanned codes
+- **Mismatch Management**: User approval dialogs for sequence discrepancies
+- **Scan Direction Support**: Top-to-bottom or bottom-to-top scanning modes
+
+### **Network-First Communication**
+- **UDP Primary**: Modern network-based scanner communication
+- **Legacy COM Support**: Serial port compatibility for older systems
+- **Real-Time Monitoring**: Live connection status with color-coded indicators
+- **Device Discovery**: Automatic ping functionality for network diagnostics
+- **PLC Integration**: Direct output signals to industrial control systems
+
+### **Professional User Interface**
+- **PyQt6 Framework**: Modern, responsive desktop interface
+- **Theme Support**: Dark/Light themes with Windows system integration
+- **Real-Time Logging**: Live validation results with pagination
+- **Animated Startup**: Professional loading animations and transitions
+- **Scalable Design**: Responsive layout for different screen sizes
+
+### **Security & Licensing**
+- **RSA License Validation**: Machine-locked licensing with hardware fingerprinting
+- **Password Protection**: Secure access to configuration windows
+- **Environment Variables**: Secure credential management
+- **Audit Trail**: Comprehensive logging of all validation activities
+
+## 📋 System Requirements
+
+- **Operating System**: Windows 10/11 (Primary), Windows Server 2019+
+- **Python**: 3.8+ (for development)
+- **Memory**: 4GB RAM minimum, 8GB recommended
+- **Network**: Ethernet adapter for UDP communication
+- **Storage**: 100MB free space for application and logs
+- **Display**: 1920x1080 minimum resolution recommended
+
+## 🛠️ Installation & Setup
+
+### **Production Deployment (Recommended)**
+1. Download the latest release executable from the releases section
+2. Run the installer as Administrator
+3. Configure license file (contact support for licensing)
+4. Launch the application from Start Menu or Desktop shortcut
+
+### **Development Setup**
+1. **Clone the repository** (requires access permissions):
+   ```bash
+   git clone https://github.com/[YOUR_GITHUB_USERNAME]/[YOUR_REPO_NAME].git
+   cd [YOUR_REPO_NAME]
+   ```
+
+2. **Create virtual environment**:
+   ```bash
+   python -m venv .venv
+   .venv\Scripts\activate  # Windows
+   # source .venv/bin/activate  # Linux/Mac
+   ```
+
+3. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configure environment variables**:
+   ```bash
+   copy .env.example .env
+   # Edit .env file with your configuration
+   ```
+
+5. **Run the application**:
+   ```bash
+   python main.py
+   ```
+
+## 🎯 Quick Start Guide
+
+### **1. Initial Setup**
+- Launch the application and select card type (Single/Half/Quarter)
+- Configure network settings for your scanners and PLCs
+- Load your card sequence file (.cpd format)
+
+### **2. Network Configuration**
+- **Main Scanner**: Configure UDP input for QR code reception
+- **Output**: Set up UDP output to PLC for validation signals
+- **On-Demand Scanner**: Optional secondary scanner configuration
+
+### **3. File Management**
+- Load CPD files with card sequence data
+- Preview sequences with scan direction indicators
+- Configure start cards and validation parameters
+
+### **4. Live Validation**
+- Start scanning operations for both heads
+- Monitor real-time validation results
+- Handle mismatches with approval dialogs
+- View comprehensive logging with pagination
+
+## 📁 Project Structure
+
+```
+card-sequence-validator/
+├── main.py                     # Application entry point
+├── requirements.txt            # Python dependencies
+├── constants.py               # Application constants
+├── output_formats.json        # Validation output formats
+├── .env.example              # Environment variables template
+├── SECURITY.md               # Security policy
+├── assets/                   # Application resources
+│   ├── favicon.ico
+│   ├── gear_loader.gif
+│   ├── Icon.png
+│   └── logo.png
+├── src/                      # Source code
+│   ├── app_state.py         # Application state management
+│   ├── dual_head_manager.py # Dual-head coordination
+│   ├── card_types.py        # Card type definitions
+│   ├── logic/               # Business logic
+│   │   └── file_parser.py   # File parsing utilities
+│   ├── services/            # Core services
+│   │   ├── udp_reader.py    # UDP communication
+│   │   ├── udp_writer.py    # UDP output
+│   │   ├── com_writer.py    # Serial communication
+│   │   ├── utilities.py     # Helper functions
+│   │   └── licensing.py     # License validation
+│   └── ui/                  # User interface
+│       ├── main_application.py      # Main window
+│       ├── network_setup_dual.py    # Network configuration
+│       ├── file_management_dual.py  # File management
+│       ├── scanner_logging_dual.py  # Live logging
+│       ├── card_type_selector.py    # Card type selection
+│       ├── styles.py               # UI themes
+│       └── widgets.py              # Custom widgets
+├── tests/                   # Test files
+├── docs/                    # Documentation
+│   ├── screenshots/         # Application screenshots
+│   └── demo/               # Demo videos
+└── build_exe.py           # Build configuration
+```
+
+## 🔧 Configuration
+
+### **Environment Variables**
+Create a `.env` file based on `.env.example`:
 ```bash
-.venv\Scripts\activate # On Windows
-# source .venv/bin/activate # On macOS/Linux
+# Master password for application access
+MASTER_PASSWORD=[YOUR_SECURE_PASSWORD]
+
+# Optional: Custom license file path
+LICENSE_FILE_PATH=[PATH_TO_YOUR_LICENSE_FILE]
+```
+
+### **Card Types**
+- **Single Card**: One ICCID per card (ISO standard cards)
+- **Half Card**: Two ICCIDs per card (Left/Right positions)
+- **Quarter Card**: Four ICCIDs per card (BL/TL/TR/BR positions)
+
+### **Output Formats**
+Validation results are sent as integer codes (configurable in `output_formats.json`):
+- **OK**: Validation passed
+- **NOT OK**: Validation failed
+- **OK (JUMPED)**: Card skipped but approved
+- **LAST OK**: Final card in sequence
+
+## 🔒 Security Considerations
+
+- **License Protection**: RSA-signed licenses tied to hardware fingerprints
+- **Network Security**: Configure firewalls for UDP communication ports
+- **Access Control**: Password-protected configuration windows
+- **Data Privacy**: Local data storage with no external transmission
+- **Audit Logging**: Comprehensive validation history for compliance
+
+## 🐛 Troubleshooting
+
+### **Common Issues**
+1. **License Validation Failed**: Ensure license.dat file is present and valid for this machine
+2. **Network Connection Issues**: Check firewall settings and network adapter configuration
+3. **File Parsing Errors**: Verify CPD file format and encoding (UTF-8 required)
+4. **Scanner Not Responding**: Confirm UDP settings and network connectivity
+
+### **Debug Mode**
+Enable debug logging by setting environment variable:
+```bash
+set DEBUG_MODE=1
 python main.py
 ```
 
-Once the application launches, you can:
-*   Configure COM ports for your scanner and output devices.
-*   Load card sequence files (`.cpd`, `.txt`, `.csv`).
-*   Start scanning and observe the validation results.
+## 📞 Support & Contact
 
-## Project Structure
+- **Technical Support**: [YOUR_SUPPORT_EMAIL](mailto:[YOUR_SUPPORT_EMAIL])
+- **Project Owner**: [YOUR_NAME] - [YOUR_EMAIL](mailto:[YOUR_EMAIL])
+- **License Issues**: [YOUR_LICENSE_EMAIL](mailto:[YOUR_LICENSE_EMAIL])
+- **Documentation**: See `docs/` folder for detailed guides
 
-```
-card_Seq_valv3/
-├───main.py                 # Main application entry point
-├───requirements.txt        # Project dependencies
-├───constants.py            # Application-wide constants
-├───output_formats.json     # Defines output data formats
-├───assets/                 # Application assets (icons, images)
-│   ├───favicon.ico
-│   ├───gear_loader.gif
-│   ├───Icon.png
-│   └───logo.png
-└───src/
-    ├───app_state.py        # Manages application state and settings
-    ├───logic/
-    │   ├───file_parser.py  # Handles parsing of different card sequence file types
-    │   └───...
-    ├───services/
-    │   ├───com_writer.py   # Manages serial communication
-    │   ├───utilities.py    # Utility functions (e.g., file parsing helpers)
-    │   └───...
-    └───ui/
-        ├───main_application.py # Main window and UI logic
-        ├───com_port_setup.py   # COM port configuration UI
-        ├───file_management.py  # File management UI
-        ├───scanner_logging.py  # Scanner logging UI
-        ├───styles.py           # Application stylesheets
-        ├───widgets.py          # Custom UI widgets
-        └───...
-```
+## 📄 License
+
+This software is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited. See [SECURITY.md](SECURITY.md) for security policies.
+
+---
+
+**© [CURRENT_YEAR] [YOUR_COMPANY_NAME]. All rights reserved.**

@@ -23,5 +23,5 @@ FILE_FILTER = "CPD Files (*.cpd)"
 
 CACHE_FILE_PATH = resource_path("app_cache.json")
 
-# Master password that always works regardless of user password
-MASTER_PASSWORD = "iamyourmaster"
+# Master password - should be set via environment variable in production
+MASTER_PASSWORD = os.getenv("MASTER_PASSWORD", "default_dev_password")

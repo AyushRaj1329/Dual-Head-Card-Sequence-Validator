@@ -1,12 +1,22 @@
-# Card Sequence Validator - Core Dependencies
-PyQt6>=6.5.0        # GUI framework for the desktop application
-customtkinter
-pyserial
-cryptography
-pyarmor       # Serial communication for COM port handling
-appdirs       # Cross-platform application data directory
-# Note: The following dependencies were removed as they are not used in the application:
-# - numpy, pandas: Not imported anywhere in the codebase
-# - pillow: Only used for logo loading, but PyQt6 handles image loading internally
-# - python-dateutil, pytz, six, tzdata: datetime operations use built-in modules
-# - PyQt5: Conflicted with PyQt6, removed to avoid version conflicts11
+# Card Sequence Validator - Required Dependencies
+
+# GUI Framework
+PyQt6>=6.5.0         # Main GUI framework for the desktop application
+
+# Serial Communication
+pyserial>=3.5        # COM port communication for scanner input/output
+
+# Security & Licensing
+cryptography>=3.4.8  # RSA signature validation for license verification
+
+# System Integration
+appdirs>=1.4.4       # Cross-platform application data directory paths
+
+# Build & Distribution (optional - only needed for creating executables)
+# pyinstaller>=5.0.0 # For building standalone executables
+# pyarmor>=8.0.0     # Code obfuscation (optional)
+
+# Development Dependencies (uncomment if needed for development)
+# pytest>=7.0.0      # Testing framework
+# black>=22.0.0      # Code formatter
+# flake8>=4.0.0      # Code linting
